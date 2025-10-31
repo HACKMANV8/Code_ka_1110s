@@ -192,6 +192,9 @@ export default function ExamPage() {
     ? 'flex items-center gap-3 rounded-lg bg-slate-800/40 border border-slate-700 text-white/80'
     : 'flex items-center gap-3 rounded-lg bg-white border border-gray-200 text-gray-700';
   const questionOptionEmptyText = isDark ? 'text-white/60' : 'text-gray-500';
+  const inputBaseClass = isDark
+    ? 'border border-slate-700 bg-slate-800/50 text-white placeholder:text-white/40 focus:border-blue-500 focus:ring-blue-500/40'
+    : 'border border-gray-300 bg-white text-gray-900 placeholder:text-gray-400 focus:border-blue-600 focus:ring-blue-600/20';
 
   useEffect(() => {
     isStartedRef.current = isStarted;
@@ -1091,7 +1094,7 @@ export default function ExamPage() {
                               {question.id ?? index + 1}
                             </span>
                             <div className="flex-1 pt-1">
-                              <p className="text-white text-base leading-relaxed">{question.prompt}</p>
+                              <p className={`${headingTextClass} text-base leading-relaxed`}>{question.prompt}</p>
                               {question.type === 'mcq' ? (
                                 <div className="mt-4 space-y-2">
                                   {question.options && question.options.length > 0 ? (
@@ -1110,14 +1113,14 @@ export default function ExamPage() {
                                       </label>
                                     ))
                                   ) : (
-                                    <p className="text-sm mt-3 text-white/50 italic">
+                                    <p className={`text-sm mt-3 italic ${subtleTextClass}`}>
                                       No answer options have been provided yet.
                                     </p>
                                   )}
                                 </div>
                               ) : (
                                 <textarea
-                                  className="mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 bg-white/5 border border-white/10 text-white placeholder:text-white/50"
+                                  className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass}`}
                                   rows={3}
                                   placeholder="Type your answer here..."
                                 />
