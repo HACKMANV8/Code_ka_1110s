@@ -154,7 +154,7 @@ export default function Home() {
             <h1 className={`text-5xl sm:text-6xl lg:text-7xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-6 leading-tight tracking-tight`}>
               All-in-one exam{' '}
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#60A5FA] to-[#2563EB]">
-                proctoring & review_
+                proctoring & review
               </span>
             </h1>
             
