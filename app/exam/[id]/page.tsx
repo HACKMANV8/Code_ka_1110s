@@ -38,6 +38,7 @@ export default function ExamPage() {
   const [isDesktop, setIsDesktop] = useState(false);
   const [questionPaneWidth, setQuestionPaneWidth] = useState(0.65);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
+  const [isDark, setIsDark] = useState(true);
   
   type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
   
@@ -143,6 +144,31 @@ export default function ExamPage() {
     manualAlertsRef.current = manualAlerts;
     setAlerts(Array.from(new Set([...remoteAlertsRef.current, ...manualAlerts])));
   }, [manualAlerts]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const theme = localStorage.getItem('theme');
+      setIsDark(theme !== 'light');
+    }
+  }, []);
+
+  const pageBackgroundClass = isDark ? 'bg-slate-900 text-white' : 'bg-gray-50 text-gray-900';
+  const cardClass = isDark ? 'bg-slate-800/60 border border-slate-700' : 'bg-white border border-gray-200';
+  const mutedPanelClass = isDark ? 'bg-slate-800/40 border border-slate-700/80' : 'bg-gray-50 border border-gray-200/80';
+  const highlightPanelClass = isDark ? 'bg-blue-500/15 border border-blue-500/40' : 'bg-blue-50 border border-blue-200';
+  const warningPanelClass = isDark ? 'bg-red-500/15 border border-red-500/40' : 'bg-red-50 border border-red-200';
+  const successPanelClass = isDark ? 'bg-emerald-500/15 border border-emerald-500/40' : 'bg-emerald-50 border border-emerald-200';
+  const subtleTextClass = isDark ? 'text-gray-300' : 'text-gray-600';
+  const secondaryTextClass = isDark ? 'text-white/70' : 'text-gray-600';
+  const headingTextClass = isDark ? 'text-white' : 'text-gray-900';
+  const questionSurfaceClass = isDark
+    ? 'border border-slate-700 bg-slate-800/40 hover:border-blue-400/60 hover:bg-slate-800/60'
+    : 'border border-gray-200 bg-white hover:border-blue-500/40 hover:bg-blue-50';
+  const questionBadgeClass = 'bg-gradient-to-br from-blue-500 to-blue-600';
+  const questionOptionLabelBase = isDark
+    ? 'flex items-center gap-3 rounded-lg bg-slate-800/40 border border-slate-700 text-white/80'
+    : 'flex items-center gap-3 rounded-lg bg-white border border-gray-200 text-gray-700';
+  const questionOptionEmptyText = isDark ? 'text-white/60' : 'text-gray-500';
 
   useEffect(() => {
     isStartedRef.current = isStarted;
@@ -824,13 +850,13 @@ export default function ExamPage() {
   }, []);
 
   return (
-    <div className="min-h-screen py-8 bg-[#19191C]">
+    <div className={`min-h-screen py-8 transition-colors duration-300 ${pageBackgroundClass}`}>
       {/* Fullscreen Re-enter Button */}
       {showFullscreenPrompt && isStarted && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50">
-          <div className="bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] rounded-2xl shadow-2xl shadow-pink-500/50 p-8 border border-white/20 backdrop-blur-xl max-w-md">
+          <div className={`bg-gradient-to-br from-blue-600 to-blue-500 rounded-2xl shadow-2xl border ${isDark ? 'border-blue-400/40' : 'border-blue-300/60'} p-8 backdrop-blur-xl max-w-md`}>
             <div className="text-center space-y-4">
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+              <div className="w-16 h-16 bg-white/10 rounded-full flex items-center justify-center mx-auto mb-4">
                 <svg className="w-8 h-8 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
                 </svg>
@@ -850,7 +876,7 @@ export default function ExamPage() {
                     (elem as any).mozRequestFullScreen();
                   }
                 }}
-                className="w-full bg-white text-[#FD366E] font-bold py-4 px-6 rounded-xl hover:bg-white/90 transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
+                className="w-full bg-white text-blue-600 font-bold py-4 px-6 rounded-xl hover:bg-white/90 transition-all transform hover:scale-105 shadow-lg flex items-center justify-center gap-2"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
@@ -863,22 +889,22 @@ export default function ExamPage() {
       )}
 
       <div className="relative z-10 max-w-6xl mx-auto flex flex-col gap-6 h-full px-4 lg:px-0">
-        <div className="rounded-lg shadow-md p-6 bg-white/5 border border-white/10">
+        <div className={`rounded-lg shadow-md p-6 ${cardClass}`}>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
-              <h1 className="text-3xl font-bold text-white">{examTitle}</h1>
+              <h1 className={`text-3xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{examTitle}</h1>
             </div>
             <div className="flex items-center gap-2">
               {isStarted ? (
                 <>
                   <span className="relative flex h-2.5 w-2.5">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#FD366E] opacity-75"></span>
-                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-[#FD366E]"></span>
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-500 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-blue-500"></span>
                   </span>
-                  <span className="text-sm font-semibold text-[#FD366E]">Monitoring Active</span>
+                  <span className="text-sm font-semibold text-blue-500">Monitoring Active</span>
                 </>
               ) : (
-                <span className="text-sm font-semibold text-white/60">Ready to Start</span>
+                <span className={`text-sm font-semibold ${isDark ? 'text-white/60' : 'text-gray-500'}`}>Ready to Start</span>
               )}
             </div>
           </div>
@@ -889,30 +915,30 @@ export default function ExamPage() {
             className="relative flex flex-col"
             style={isDesktop ? { flexBasis: `${(questionPaneWidth * 100).toFixed(2)}%`, maxWidth: `${(questionPaneWidth * 100).toFixed(2)}%` } : undefined}
           >
-            <div className="rounded-lg shadow-md p-6 flex-1 bg-white/5 border border-white/10">
+            <div className={`rounded-lg shadow-md p-6 flex-1 ${cardClass}`}>
               {!isStarted ? (
                 // Show instructions before exam starts
                 <>
                   <div className="mb-8">
                     <div className="flex items-center gap-3 mb-6">
-                      <div className="w-12 h-12 bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] rounded-xl flex items-center justify-center shadow-lg shadow-pink-500/30">
-                        <span className="text-white text-2xl">📋</span>
+                      <div className="w-12 h-12 bg-gradient-to-br from-blue-500 to-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <span className={`${headingTextClass} text-2xl`}>📋</span>
                       </div>
                       <div>
-                        <h2 className="text-3xl font-bold text-white">Exam Instructions</h2>
-                        <p className="text-sm mt-1 text-white/50">Please read carefully before starting</p>
+                        <h2 className={`text-3xl font-bold ${headingTextClass}`}>Exam Instructions</h2>
+                        <p className={`text-sm mt-1 ${subtleTextClass}`}>Please read carefully before starting</p>
                       </div>
                     </div>
                   </div>
 
                   <div className="space-y-4">
                     {/* Important Guidelines */}
-                    <div className="rounded-lg border-l-4 border-red-500 p-6 backdrop-blur-sm bg-red-500/10">
-                      <h3 className="font-bold mb-4 flex items-center gap-2 text-lg text-red-400">
+                    <div className={`rounded-lg border-l-4 border-red-500 p-6 ${warningPanelClass}`}>
+                      <h3 className="font-bold mb-4 flex items-center gap-2 text-lg text-red-500">
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd"/></svg>
                         Important Guidelines
                       </h3>
-                      <ul className="space-y-3 text-sm text-white/80">
+                      <ul className={`space-y-3 text-sm ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
                         <li className="flex gap-3">
                           <svg className="w-5 h-5 flex-shrink-0 text-red-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd"/></svg>
                           <span><strong>Camera Monitoring:</strong> Your webcam will be monitored throughout the exam</span>
@@ -937,53 +963,53 @@ export default function ExamPage() {
                     </div>
 
                     {/* Setup Checklist */}
-                    <div className="rounded-lg border-l-4 border-green-500 p-6 backdrop-blur-sm bg-green-500/10">
-                      <h3 className="font-bold mb-4 flex items-center gap-2 text-lg text-green-400">
+                    <div className={`rounded-lg border-l-4 border-emerald-500 p-6 ${successPanelClass}`}>
+                      <h3 className="font-bold mb-4 flex items-center gap-2 text-lg text-emerald-500">
                         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M6.707 2.293a1 1 0 00-1.414 1.414l9 9a1 1 0 001.414-1.414l-9-9zM4 10a2 2 0 11-4 0 2 2 0 014 0zm12 0a2 2 0 11-4 0 2 2 0 014 0z" clipRule="evenodd"/></svg>
                         Setup Checklist
                       </h3>
-                      <ul className="space-y-2.5 text-sm text-white/80">
+                      <ul className={`space-y-2.5 text-sm ${isDark ? 'text-white/80' : 'text-gray-700'}`}>
                         <li className="flex gap-3">
-                          <svg className="w-5 h-5 flex-shrink-0 text-green-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                          <svg className="w-5 h-5 flex-shrink-0 text-emerald-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
                           <span>Environment is well-lit</span>
                         </li>
                         <li className="flex gap-3">
-                          <svg className="w-5 h-5 flex-shrink-0 text-green-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                          <svg className="w-5 h-5 flex-shrink-0 text-emerald-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
                           <span>Face is centered in camera</span>
                         </li>
                         <li className="flex gap-3">
-                          <svg className="w-5 h-5 flex-shrink-0 text-green-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                          <svg className="w-5 h-5 flex-shrink-0 text-emerald-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
                           <span>All other tabs and apps closed</span>
                         </li>
                         <li className="flex gap-3">
-                          <svg className="w-5 h-5 flex-shrink-0 text-green-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
+                          <svg className="w-5 h-5 flex-shrink-0 text-emerald-500 mt-0.5" fill="currentColor" viewBox="0 0 20 20"><path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd"/></svg>
                           <span>Stable internet connection verified</span>
                         </li>
                       </ul>
                     </div>
 
                     {/* Exam Info Card */}
-                    <div className="rounded-lg border p-6 backdrop-blur-sm bg-white/5 border-white/10">
-                      <h3 className="font-bold mb-4 text-lg text-white">📝 Exam Details</h3>
+                    <div className={`rounded-lg border p-6 ${mutedPanelClass}`}>
+                      <h3 className={`font-bold mb-4 text-lg ${headingTextClass}`}>📝 Exam Details</h3>
                       <div className="grid grid-cols-2 gap-4">
                         <div>
-                          <p className="text-xs uppercase font-semibold tracking-wide text-white/50">Title</p>
-                          <p className="text-lg font-semibold mt-1 text-white">{examTitle}</p>
+                          <p className={`text-xs uppercase font-semibold tracking-wide ${secondaryTextClass}`}>Title</p>
+                          <p className={`text-lg font-semibold mt-1 ${headingTextClass}`}>{examTitle}</p>
                         </div>
                         <div>
-                          <p className="text-xs uppercase font-semibold tracking-wide text-white/50">Questions</p>
-                          <p className="text-lg font-semibold mt-1 text-white">{questions.length > 0 ? questions.length : 'Loading...'}</p>
+                          <p className={`text-xs uppercase font-semibold tracking-wide ${secondaryTextClass}`}>Questions</p>
+                          <p className={`text-lg font-semibold mt-1 ${headingTextClass}`}>{questions.length > 0 ? questions.length : 'Loading...'}</p>
                         </div>
                       </div>
-                      <div className="mt-4 pt-4 border-t" style={{ borderColor: 'rgba(255,255,255,0.1)' }}>
-                        <p className="text-xs uppercase font-semibold tracking-wide text-white/50">Session ID</p>
-                        <p className="text-sm font-mono mt-1 break-all text-white/70">{sessionId || 'Loading...'}</p>
+                      <div className={`mt-4 pt-4 border-t ${isDark ? 'border-slate-700/60' : 'border-gray-200'}`}>
+                        <p className={`text-xs uppercase font-semibold tracking-wide ${secondaryTextClass}`}>Session ID</p>
+                        <p className={`text-sm font-mono mt-1 break-all ${isDark ? 'text-white/70' : 'text-gray-600'}`}>{sessionId || 'Loading...'}</p>
                       </div>
                     </div>
 
                     {/* Warning Banner */}
-                    <div className="rounded-lg border-l-4 border-[#FD366E] p-6 backdrop-blur-sm bg-[#FD366E]/10">
-                      <p className="text-sm leading-relaxed text-white/90">
+                    <div className={`rounded-lg border-l-4 border-blue-500 p-6 ${highlightPanelClass}`}>
+                      <p className={`text-sm leading-relaxed ${isDark ? 'text-white/85' : 'text-gray-700'}`}>
                         <strong>⚠️ Ready to start?</strong> Once you click &quot;Start Exam&quot;, monitoring begins immediately. Make sure you have completed all the setup checks above. You cannot pause the exam once started.
                       </p>
                     </div>
@@ -993,58 +1019,58 @@ export default function ExamPage() {
                 // Show questions after exam starts
                 <>
                   <div className="flex items-center gap-3 mb-4">
-                    <div className="w-10 h-10 bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] rounded-lg flex items-center justify-center">
-                      <span className="text-white text-xl">📝</span>
+                    <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+                      <span className={`${headingTextClass} text-xl`}>📝</span>
                     </div>
                     <div>
-                      <h2 className="text-xl font-semibold text-white">Exam Questions</h2>
-                      <p className="text-sm text-white/60 mt-0.5">Answer all questions carefully</p>
+                      <h2 className={`text-xl font-semibold ${headingTextClass}`}>Exam Questions</h2>
+                      <p className={`text-sm mt-0.5 ${subtleTextClass}`}>Answer all questions carefully</p>
                     </div>
                   </div>
                   <div className="mt-6 space-y-4">
                     {questions.length === 0 ? (
-                      <div className="rounded-lg bg-white/5 border border-white/10 px-4 py-8 text-white/60 text-center">
-                        <p className="mb-2">📚 Sample Questions</p>
-                        <p className="text-sm">Questions will appear here once added by your instructor.</p>
+                      <div className={`rounded-lg px-4 py-8 text-center border ${mutedPanelClass}`}>
+                        <p className={`mb-2 ${headingTextClass}`}>📚 Sample Questions</p>
+                        <p className={`text-sm ${subtleTextClass}`}>Questions will appear here once added by your instructor.</p>
                       </div>
                     ) : (
                       questions.map((question, index) => (
                         <div
                           key={question.id}
-                          className="rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm p-5 hover:border-[#FD366E]/50 hover:bg-white/[0.07] transition-all duration-200"
+                          className={`rounded-lg backdrop-blur-sm p-5 transition-all duration-200 ${questionSurfaceClass}`}
                         >
                           <div className="flex items-start gap-3">
-                            <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] rounded-lg flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-pink-500/20">
+                            <span className={`flex-shrink-0 w-8 h-8 ${questionBadgeClass} rounded-lg flex items-center justify-center text-white text-sm font-bold shadow-lg`}>
                               {question.id ?? index + 1}
                             </span>
                             <div className="flex-1 pt-1">
-                              <p className="text-white leading-relaxed">{question.prompt}</p>
+                              <p className={`${headingTextClass} leading-relaxed`}>{question.prompt}</p>
                               {question.type === 'mcq' ? (
                                 <div className="mt-4 space-y-2">
                                   {question.options && question.options.length > 0 ? (
                                     question.options.map((option, optionIndex) => (
                                       <label
                                         key={optionIndex}
-                                        className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white/80"
+                                        className={`${questionOptionLabelBase} px-3 py-2`}
                                       >
                                         <input
                                           type="radio"
-                                      name={`question-${question.id}`}
-                                          className="h-4 w-4 text-[#FD366E] focus:ring-[#FD366E]"
+                                          name={`question-${question.id}`}
+                                          className="h-4 w-4 text-blue-500 focus:ring-blue-500"
                                           disabled
                                         />
                                         <span>{option.text}</span>
                                       </label>
                                     ))
                                   ) : (
-                                    <p className="text-sm text-white/60 mt-3">
+                                    <p className={`text-sm mt-3 ${questionOptionEmptyText}`}>
                                       No answer options have been provided yet.
                                     </p>
                                   )}
                                 </div>
                               ) : (
                                 <textarea
-                                  className="mt-4 w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/40 focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] outline-none resize-none transition-all"
+                                  className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass}`}
                                   rows={3}
                                   placeholder="Type your answer here..."
                                 />
@@ -1063,7 +1089,7 @@ export default function ExamPage() {
               onMouseDown={startResize}
               role="presentation"
             >
-              <span className="h-12 w-1 rounded-full bg-[#FD366E]/30 transition-colors group-hover:bg-[#FD366E]" />
+              <span className="h-12 w-1 rounded-full bg-blue-500/30 transition-colors group-hover:bg-blue-500" />
             </div>
           </div>
 
@@ -1071,13 +1097,13 @@ export default function ExamPage() {
             className="lg:flex-1 flex flex-col gap-4"
             style={isDesktop ? { flexBasis: `${((1 - questionPaneWidth) * 100).toFixed(2)}%` } : undefined}
           >
-            <div className="bg-white/5 backdrop-blur-md border border-white/10 rounded-lg shadow-lg p-6 flex flex-col gap-4">
+            <div className={`backdrop-blur-md rounded-lg shadow-lg p-6 flex flex-col gap-4 ${cardClass}`}>
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold text-white flex items-center gap-2">
+                <h2 className={`text-xl font-semibold flex items-center gap-2 ${headingTextClass}`}>
                   <span>📹</span> Your Webcam
                 </h2>
                 {isStarted ? (
-                  <span className="flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-400 text-sm font-semibold rounded-full border border-red-500/30">
+                  <span className="flex items-center gap-2 px-3 py-1 bg-red-500/20 text-red-500 text-sm font-semibold rounded-full border border-red-500/30">
                     <span className="relative flex h-2 w-2">
                       <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-500 opacity-75"></span>
                       <span className="relative inline-flex rounded-full h-2 w-2 bg-red-500"></span>
@@ -1085,12 +1111,12 @@ export default function ExamPage() {
                     Recording
                   </span>
                 ) : (
-                  <span className="px-3 py-1 bg-yellow-500/20 text-yellow-400 text-sm font-semibold rounded-full border border-yellow-500/30">
+                  <span className="px-3 py-1 bg-yellow-500/20 text-yellow-500 text-sm font-semibold rounded-full border border-yellow-500/30">
                     Ready
                   </span>
                 )}
               </div>
-              <div className="relative bg-black/50 border border-white/10 rounded-lg overflow-hidden aspect-video">
+              <div className="relative bg-black/50 border border-black/20 rounded-lg overflow-hidden aspect-video">
                 <video
                   ref={videoRef}
                   autoPlay
@@ -1115,10 +1141,10 @@ export default function ExamPage() {
               <canvas ref={canvasRef} className="hidden" />
             </div>
 
-            <div className="rounded-lg shadow-md p-6 flex flex-col gap-4 bg-white/5 border border-white/10">
+            <div className={`rounded-lg shadow-md p-6 flex flex-col gap-4 ${cardClass}`}>
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Exam Controls</h3>
-                <span className="text-sm text-white/60">
+                <h3 className={`text-lg font-semibold ${headingTextClass}`}>Exam Controls</h3>
+                <span className={`text-sm ${subtleTextClass}`}>
                   {isStarted ? 'Session active' : 'Session not started'}
                 </span>
               </div>
@@ -1127,27 +1153,30 @@ export default function ExamPage() {
                   <button
                     onClick={startExam}
                     disabled={!sessionId}
-                    className="flex-1 bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] hover:shadow-lg hover:shadow-pink-500/30 text-white font-semibold py-3.5 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:shadow-lg text-white font-semibold py-3.5 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
                   >
                     <span>▶️</span> Start Exam
                   </button>
                 ) : (
                   <button
                     onClick={submitExam}
-                    className="flex-1 bg-gradient-to-r from-blue-500 to-blue-600 hover:shadow-lg hover:shadow-blue-500/30 text-white font-semibold py-3.5 px-6 rounded-lg transition-all flex items-center justify-center gap-2"
+                    className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg text-white font-semibold py-3.5 px-6 rounded-lg transition-all flex items-center justify-center gap-2"
                   >
                     <span>✅</span> Submit Exam
                   </button>
                 )}
               </div>
-              <div className="rounded-lg px-4 py-3 text-sm bg-white/5 border border-white/10 text-white/70">
+              <div className={`rounded-lg px-4 py-3 text-sm ${mutedPanelClass} ${secondaryTextClass}`}>
                 {status}
               </div>
             </div>
 
-            <div className="rounded-lg shadow-md p-6 flex flex-col gap-4 bg-white/5 border border-white/10">
+            <div className={`rounded-lg shadow-md p-6 flex flex-col gap-4 ${cardClass}`}>
               <div className="flex items-center justify-between">
-                <h3 className="text-lg font-semibold text-white">Detection Results</h3>
+                <div>
+                  <h3 className={`text-lg font-semibold ${headingTextClass}`}>Detection Results</h3>
+                  <p className={`text-sm ${subtleTextClass}`}>Focus score</p>
+                </div>
                 <span
                   className={`text-2xl font-bold ${
                     currentScore >= 85
@@ -1162,7 +1191,7 @@ export default function ExamPage() {
                   {currentScore}%
                 </span>
               </div>
-              <div className="rounded-full h-3 overflow-hidden bg-white/10">
+              <div className={`rounded-full h-3 overflow-hidden ${isDark ? 'bg-slate-700/40' : 'bg-gray-200'}`}>
                 <div
                   className={`h-full transition-all ${
                     currentScore >= 85
@@ -1176,16 +1205,16 @@ export default function ExamPage() {
                   style={{ width: `${currentScore}%` }}
                 />
               </div>
-              <div className="text-sm text-white/70">
-                <p className="font-semibold mb-1 text-white">Current state:</p>
+              <div className={`text-sm ${secondaryTextClass}`}>
+                <p className={`font-semibold mb-1 ${headingTextClass}`}>Current state:</p>
                 <p>{status}</p>
               </div>
               <div>
-                <p className="text-sm font-semibold mb-2 flex items-center gap-2 text-white">
+                <p className={`text-sm font-semibold mb-2 flex items-center gap-2 ${headingTextClass}`}>
                   <span>🚨</span> Live alerts
                 </p>
                 {alerts.length === 0 ? (
-                  <div className="rounded-lg border px-4 py-3 text-sm text-center border-white/10 bg-white/5 text-white/60">
+                  <div className={`rounded-lg px-4 py-3 text-sm text-center ${mutedPanelClass} ${subtleTextClass}`}>
                     No suspicious activity detected
                   </div>
                 ) : (
@@ -1193,7 +1222,11 @@ export default function ExamPage() {
                     {alerts.map((alert, index) => (
                       <li
                         key={index}
-                        className="rounded-lg border border-red-500/30 bg-red-500/10 px-4 py-2.5 text-red-400 flex items-center gap-2"
+                        className={`rounded-lg px-4 py-2.5 flex items-center gap-2 ${
+                          isDark
+                            ? 'border border-red-500/30 bg-red-500/10 text-red-300'
+                            : 'border border-red-200 bg-red-50 text-red-600'
+                        }`}
                       >
                         <span>⚠️</span>
                         <span>{alert.replace(/_/g, ' ').toUpperCase()}</span>
