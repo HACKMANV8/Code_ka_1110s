@@ -1,10 +1,34 @@
 'use client';
 
 import { useState } from 'react';
-import { ExamQuestion, QuestionOption, StudentAnswer } from '@/lib/types/database';
+
+interface Question {
+  id: number;
+  type: 'mcq' | 'text' | 'multiple_select' | 'true_false';
+  prompt: string;
+  options?: Array<{ text: string; isCorrect: boolean }>;
+  explanation?: string;
+  topic?: string;
+  difficulty?: string;
+  marks?: number;
+}
+
+interface StudentAnswer {
+  id?: string;
+  session_id: string;
+  question_id: string | number;
+  selected_options?: string[];
+  text_answer?: string;
+  is_correct?: boolean;
+  marks_obtained?: number;
+  time_spent_seconds?: number;
+  answered_at?: string;
+  created_at?: string;
+  updated_at?: string;
+}
 
 interface QuestionReviewCardProps {
-  question: ExamQuestion & { options?: QuestionOption[] };
+  question: Question;
   studentAnswer?: StudentAnswer;
   sessionId: string;
   questionNumber: number;
@@ -81,17 +105,19 @@ export default function QuestionReviewCard({
     );
   };
 
-  const getSelectedOptionIds = () => {
+  const getSelectedAnswers = () => {
     return studentAnswer?.selected_options || [];
   };
 
-  const isOptionSelected = (optionId: string) => {
-    return getSelectedOptionIds().includes(optionId);
+  const isOptionSelected = (index: number) => {
+    const selected = getSelectedAnswers();
+    const letter = String.fromCharCode(65 + index); // A, B, C, D...
+    return selected.includes(letter);
   };
 
-  const getOptionClassName = (option: QuestionOption) => {
-    const selected = isOptionSelected(option.id);
-    const correct = option.is_correct;
+  const getOptionClassName = (option: { text: string; isCorrect: boolean }, index: number) => {
+    const selected = isOptionSelected(index);
+    const correct = option.isCorrect;
 
     if (selected && correct) {
       return 'bg-green-500/10 border-green-500/50 text-green-300';
@@ -121,49 +147,47 @@ export default function QuestionReviewCard({
                   {question.topic}
                 </span>
               )}
-              {question.difficulty_level && (
+              {question.difficulty && (
                 <span className="px-2 py-1 rounded text-xs bg-purple-500/10 text-purple-400 border border-purple-500/30">
-                  {question.difficulty_level}
+                  {question.difficulty}
                 </span>
               )}
             </div>
-            <p className="text-white text-base leading-relaxed">{question.question_text}</p>
+            <p className="text-white text-base leading-relaxed">{question.prompt}</p>
             <div className="flex items-center gap-2 mt-2 text-xs text-white/50">
-              <span>Type: {question.question_type}</span>
+              <span>Type: {question.type}</span>
               <span>•</span>
-              <span>Marks: {studentAnswer?.marks_obtained || 0}/{question.marks}</span>
+              <span>Marks: {studentAnswer?.marks_obtained || 0}/{question.marks || 1}</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Options (for MCQ) */}
-      {(question.question_type === 'mcq' || question.question_type === 'multiple_select') && question.options && (
+      {(question.type === 'mcq' || question.type === 'multiple_select') && question.options && (
         <div className="space-y-2 mb-4">
-          {question.options
-            .sort((a, b) => a.order_index - b.order_index)
-            .map((option) => (
-              <div
-                key={option.id}
-                className={`p-3 rounded-lg border transition-all ${getOptionClassName(option)}`}
-              >
-                <div className="flex items-start gap-3">
-                  <span className="font-bold">{option.option_label}.</span>
-                  <span className="flex-1">{option.option_text}</span>
-                  {option.is_correct && (
-                    <span className="text-green-400 text-sm">✓ Correct</span>
-                  )}
-                  {isOptionSelected(option.id) && !option.is_correct && (
-                    <span className="text-red-400 text-sm">Your answer</span>
-                  )}
-                </div>
+          {question.options.map((option, index) => (
+            <div
+              key={index}
+              className={`p-3 rounded-lg border transition-all ${getOptionClassName(option, index)}`}
+            >
+              <div className="flex items-start gap-3">
+                <span className="font-bold">{String.fromCharCode(65 + index)}.</span>
+                <span className="flex-1">{option.text}</span>
+                {option.isCorrect && (
+                  <span className="text-green-400 text-sm">✓ Correct</span>
+                )}
+                {isOptionSelected(index) && !option.isCorrect && (
+                  <span className="text-red-400 text-sm">Your answer</span>
+                )}
               </div>
-            ))}
+            </div>
+          ))}
         </div>
       )}
 
       {/* Text Answer */}
-      {(question.question_type === 'short_answer' || question.question_type === 'long_answer') && studentAnswer?.text_answer && (
+      {(question.type === 'text') && studentAnswer?.text_answer && (
         <div className="mb-4">
           <p className="text-white/60 text-sm mb-2">Your Answer:</p>
           <div className="bg-white/5 border border-white/10 rounded-lg p-4">

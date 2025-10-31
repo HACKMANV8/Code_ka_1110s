@@ -1,13 +1,24 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+interface Question {
+  id: number;
+  type: 'mcq' | 'text' | 'multiple_select' | 'true_false';
+  prompt: string;
+  options?: Array<{ text: string; isCorrect: boolean }>;
+  explanation?: string;
+  topic?: string;
+  difficulty?: string;
+  marks?: number;
+}
+
 /**
  * POST /api/exam/explain-question
- * Get AI explanation for a specific exam question
+ * Get AI explanation for a specific exam question (from JSONB format)
  */
 export async function POST(request: NextRequest) {
   try {
-    const { question_id, session_id, student_answer, include_context } = await request.json();
+    const { question_id, session_id, include_context } = await request.json();
 
     if (!question_id || !session_id) {
       return NextResponse.json(
@@ -19,13 +30,13 @@ export async function POST(request: NextRequest) {
     const supabase = await createClient();
 
     // Verify student has access to this question
-    const { data: session } = await supabase
+    const { data: session, error: sessionError } = await supabase
       .from('exam_sessions')
       .select('student_id, exam_id')
       .eq('id', session_id)
       .single();
 
-    if (!session) {
+    if (sessionError || !session) {
       return NextResponse.json(
         { error: 'Session not found' },
         { status: 404 }
@@ -42,18 +53,25 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Fetch question details with options
-    const { data: question, error: questionError } = await supabase
-      .from('exam_questions')
-      .select(`
-        *,
-        options:question_options(*)
-      `)
-      .eq('id', question_id)
-      .eq('exam_id', session.exam_id)
+    // Fetch exam with JSONB questions
+    const { data: exam, error: examError } = await supabase
+      .from('exams')
+      .select('id, name, questions')
+      .eq('id', session.exam_id)
       .single();
 
-    if (questionError || !question) {
+    if (examError || !exam) {
+      return NextResponse.json(
+        { error: 'Exam not found' },
+        { status: 404 }
+      );
+    }
+
+    // Find the question in the JSONB array
+    const questions = exam.questions as Question[];
+    const question = questions.find((q) => q.id === question_id);
+
+    if (!question) {
       return NextResponse.json(
         { error: 'Question not found' },
         { status: 404 }
@@ -65,11 +83,11 @@ export async function POST(request: NextRequest) {
       .from('student_answers')
       .select('*')
       .eq('session_id', session_id)
-      .eq('question_id', question_id)
+      .eq('question_id', String(question_id))
       .single();
 
     // Prepare prompt for Azure OpenAI
-    const prompt = buildExplanationPrompt(question, studentAnswer, include_context);
+    const prompt = buildExplanationPrompt(question, studentAnswer);
 
     // Call Azure OpenAI
     const explanation = await getAzureOpenAIExplanation(prompt);
@@ -80,7 +98,7 @@ export async function POST(request: NextRequest) {
       .insert({
         session_id,
         student_id: user.id,
-        question_id,
+        question_id: String(question_id),
         requested_ai_explanation: true,
         ai_explanation_text: explanation.text,
         ai_explanation_tokens: explanation.tokens,
@@ -91,10 +109,10 @@ export async function POST(request: NextRequest) {
       explanation: explanation.text,
       tokens_used: explanation.tokens,
       question: {
-        text: question.question_text,
-        type: question.question_type,
+        text: question.prompt,
+        type: question.type,
         topic: question.topic,
-        difficulty: question.difficulty_level,
+        difficulty: question.difficulty,
       },
       student_answer: studentAnswer,
     });
@@ -108,45 +126,43 @@ export async function POST(request: NextRequest) {
   }
 }
 
-function buildExplanationPrompt(question: any, studentAnswer: any, includeContext: boolean): string {
+function buildExplanationPrompt(question: Question, studentAnswer: any): string {
   let prompt = `You are an expert educator providing detailed explanations for exam questions. 
 
-Question Type: ${question.question_type}
+Question Type: ${question.type}
 ${question.topic ? `Topic: ${question.topic}` : ''}
-${question.difficulty_level ? `Difficulty: ${question.difficulty_level}` : ''}
+${question.difficulty ? `Difficulty: ${question.difficulty}` : ''}
 
-Question: ${question.question_text}
+Question: ${question.prompt}
 `;
 
   // Add options for MCQ
-  if (question.question_type === 'mcq' || question.question_type === 'multiple_select') {
+  if ((question.type === 'mcq' || question.type === 'multiple_select' || question.type === 'true_false') && question.options) {
     prompt += `\nOptions:\n`;
-    question.options?.forEach((opt: any) => {
-      prompt += `${opt.option_label}. ${opt.option_text}${opt.is_correct ? ' [CORRECT]' : ''}\n`;
+    question.options.forEach((opt, idx) => {
+      const letter = String.fromCharCode(65 + idx); // A, B, C, D...
+      prompt += `${letter}. ${opt.text}${opt.isCorrect ? ' [CORRECT ANSWER]' : ''}\n`;
     });
   }
 
   // Add student's answer if provided
   if (studentAnswer) {
     prompt += `\n\nStudent's Answer: `;
-    if (studentAnswer.selected_options && studentAnswer.selected_options.length > 0) {
-      const selectedLabels = question.options
-        ?.filter((opt: any) => studentAnswer.selected_options.includes(opt.id))
-        .map((opt: any) => opt.option_label)
-        .join(', ');
-      prompt += `${selectedLabels}`;
-      prompt += `\nResult: ${studentAnswer.is_correct ? 'Correct ✓' : 'Incorrect ✗'}`;
-      prompt += `\nMarks: ${studentAnswer.marks_obtained}/${question.marks}`;
-    } else if (studentAnswer.text_answer) {
+    if (studentAnswer.text_answer) {
       prompt += studentAnswer.text_answer;
+    } else if (studentAnswer.selected_options && studentAnswer.selected_options.length > 0) {
+      prompt += studentAnswer.selected_options.join(', ');
     } else {
       prompt += 'Not answered';
     }
+    
+    prompt += `\nResult: ${studentAnswer.is_correct ? 'Correct ✓' : 'Incorrect ✗'}`;
+    prompt += `\nMarks Obtained: ${studentAnswer.marks_obtained || 0}`;
   }
 
   // Add pre-written explanation if available
   if (question.explanation) {
-    prompt += `\n\nInstructor's Explanation: ${question.explanation}`;
+    prompt += `\n\nInstructor's Notes: ${question.explanation}`;
   }
 
   prompt += `\n\nPlease provide a comprehensive explanation that:

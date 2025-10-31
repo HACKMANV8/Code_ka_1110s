@@ -4,13 +4,33 @@ import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import QuestionReviewCard from '@/components/student/QuestionReviewCard';
-import type { ExamQuestion, QuestionOption, StudentAnswer, ExamResult, Exam } from '@/lib/types/database';
 import Link from 'next/link';
 
 export const dynamic = 'force-dynamic';
 
-interface QuestionWithOptions extends ExamQuestion {
-  options?: QuestionOption[];
+interface Question {
+  id: number;
+  type: 'mcq' | 'text' | 'multiple_select' | 'true_false';
+  prompt: string;
+  options?: Array<{ text: string; isCorrect: boolean }>;
+  explanation?: string;
+  topic?: string;
+  difficulty?: string;
+  marks?: number;
+}
+
+interface StudentAnswer {
+  id?: string;
+  session_id: string;
+  question_id: string | number;
+  selected_options?: string[];
+  text_answer?: string;
+  is_correct?: boolean;
+  marks_obtained?: number;
+  time_spent_seconds?: number;
+  answered_at?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export default function ExamReviewPage() {
@@ -19,10 +39,10 @@ export default function ExamReviewPage() {
   const sessionId = params.sessionId as string;
 
   const [loading, setLoading] = useState(true);
-  const [exam, setExam] = useState<Exam | null>(null);
-  const [result, setResult] = useState<ExamResult | null>(null);
-  const [questions, setQuestions] = useState<QuestionWithOptions[]>([]);
-  const [answers, setAnswers] = useState<Map<string, StudentAnswer>>(new Map());
+  const [examName, setExamName] = useState<string>('');
+  const [result, setResult] = useState<any>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [answers, setAnswers] = useState<Map<string | number, StudentAnswer>>(new Map());
   const [error, setError] = useState<string | null>(null);
 
   const supabase = createClient();
@@ -39,7 +59,7 @@ export default function ExamReviewPage() {
       // Get session details
       const { data: session, error: sessionError } = await supabase
         .from('exam_sessions')
-        .select('*, exam:exams(*)')
+        .select('id, student_id, exam_id, status, submitted_at')
         .eq('id', sessionId)
         .single();
 
@@ -60,7 +80,19 @@ export default function ExamReviewPage() {
         return;
       }
 
-      setExam(session.exam as Exam);
+      // Get exam details with JSONB questions
+      const { data: exam, error: examError } = await supabase
+        .from('exams')
+        .select('id, name, description, questions')
+        .eq('id', session.exam_id)
+        .single();
+
+      if (examError || !exam) {
+        throw new Error('Exam not found');
+      }
+
+      setExamName(exam.name);
+      setQuestions(exam.questions || []);
 
       // Get exam results
       const { data: resultData } = await supabase
@@ -70,22 +102,6 @@ export default function ExamReviewPage() {
         .single();
 
       setResult(resultData);
-
-      // Get all questions with options
-      const { data: questionsData, error: questionsError } = await supabase
-        .from('exam_questions')
-        .select(`
-          *,
-          options:question_options(*)
-        `)
-        .eq('exam_id', session.exam_id)
-        .order('order_index', { ascending: true });
-
-      if (questionsError) {
-        throw questionsError;
-      }
-
-      setQuestions(questionsData as QuestionWithOptions[]);
 
       // Get all student answers
       const { data: answersData, error: answersError } = await supabase
@@ -98,7 +114,7 @@ export default function ExamReviewPage() {
       }
 
       // Create a map of question_id -> answer
-      const answersMap = new Map<string, StudentAnswer>();
+      const answersMap = new Map<string | number, StudentAnswer>();
       answersData?.forEach((answer) => {
         answersMap.set(answer.question_id, answer);
       });
@@ -143,10 +159,6 @@ export default function ExamReviewPage() {
     );
   }
 
-  if (!exam) {
-    return null;
-  }
-
   const getScoreColor = (percentage: number) => {
     if (percentage >= 85) return 'text-green-400';
     if (percentage >= 70) return 'text-yellow-400';
@@ -168,10 +180,7 @@ export default function ExamReviewPage() {
           </Link>
           
           <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <h1 className="text-3xl font-bold text-white mb-2">{exam.title}</h1>
-            {exam.description && (
-              <p className="text-white/60 mb-4">{exam.description}</p>
-            )}
+            <h1 className="text-3xl font-bold text-white mb-2">{examName}</h1>
             
             {/* Results Summary */}
             {result && (
