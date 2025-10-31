@@ -1217,6 +1217,15 @@ export default function ExamPage() {
                                   })}
                                   onBlur={(e) => handleTextAnswer(question.id, e.target.value)}
                                   disabled={!isStarted}
+                                  onPaste={(event) => {
+                                    event.preventDefault();
+                                  }}
+                                  onCopy={(event) => {
+                                    event.preventDefault();
+                                  }}
+                                  onCut={(event) => {
+                                    event.preventDefault();
+                                  }}
                                   className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass} ${
                                     !isStarted ? 'opacity-50 cursor-not-allowed' : ''
                                   }`}

@@ -14,9 +14,10 @@ import json
 import time
 import logging
 import platform
-from typing import Dict, List, Optional, Tuple
+from typing import Deque, Dict, List, Optional, Tuple
 import asyncio
 from starlette.websockets import WebSocketState
+from collections import deque
 
 try:
     import mediapipe as mp
@@ -150,6 +151,22 @@ class FocusMonitor:
         self.phone_detection_enabled = False
         self._phone_disabled_logged = False
 
+        # Rolling frame hash history for loop detection
+        self._frame_hash_history: Deque[Tuple[float, int]] = deque()
+        self._loop_detection_score: float = 0.0
+        self.loop_detection_state: Dict[str, object] = {
+            "detected": False,
+            "confidence": 0.0,
+            "hash_reuse_ratio": 0.0,
+            "samples_considered": 0,
+            "window_seconds": 0.0,
+            "dominant_cluster_frames": 0,
+            "dominant_cluster_duration": 0.0,
+            "unique_cluster_count": 0,
+            "last_updated": 0.0,
+            "last_hash": None,
+        }
+
         if YOLO is None:
             logger.error("ultralytics is not installed. Phone detection disabled.")
         else:
@@ -267,6 +284,117 @@ class FocusMonitor:
 
         return self.device_presence_score >= 0.4
     
+    @staticmethod
+    def _compute_frame_hash(gray_frame: np.ndarray) -> int:
+        """
+        Compute a perceptual hash (dHash) for a grayscale frame.
+        Downscales to 9x8 and compares neighbouring pixels to capture structure.
+        """
+        if gray_frame is None or gray_frame.size == 0:
+            return 0
+        try:
+            resized = cv2.resize(gray_frame, (9, 8), interpolation=cv2.INTER_AREA)
+        except Exception:
+            return 0
+        diff = resized[:, 1:] > resized[:, :-1]
+        packed = np.packbits(diff.astype(np.uint8), axis=None)
+        return int.from_bytes(packed.tobytes(), byteorder="big", signed=False)
+
+    @staticmethod
+    def _hamming_distance(hash_a: int, hash_b: int) -> int:
+        """Compute Hamming distance between two 64-bit hashes."""
+        return int(bin(hash_a ^ hash_b).count("1"))
+
+    def _update_loop_detector(self, gray_frame: np.ndarray) -> None:
+        """
+        Track frame hashes in a sliding window and estimate whether the stream is looping.
+        """
+        timestamp = time.time()
+        frame_hash = self._compute_frame_hash(gray_frame)
+
+        window_seconds = 12.0
+        tolerance_bits = 6
+        min_samples = 45
+
+        self._frame_hash_history.append((timestamp, frame_hash))
+        # Trim by time to keep only the recent window
+        while self._frame_hash_history and timestamp - self._frame_hash_history[0][0] > window_seconds:
+            self._frame_hash_history.popleft()
+
+        recent_entries = list(self._frame_hash_history)
+        sample_count = len(recent_entries)
+
+        if sample_count < min_samples:
+            self.loop_detection_state.update({
+                "detected": False,
+                "confidence": 0.0,
+                "hash_reuse_ratio": 0.0,
+                "samples_considered": sample_count,
+                "window_seconds": window_seconds,
+                "dominant_cluster_frames": 0,
+                "dominant_cluster_duration": 0.0,
+                "unique_cluster_count": sample_count,
+                "last_updated": timestamp,
+                "last_hash": frame_hash,
+            })
+            # Gently decay score when insufficient evidence
+            self._loop_detection_score *= 0.92
+            self._loop_detection_score = max(0.0, min(1.0, self._loop_detection_score))
+            return
+
+        clusters: List[Dict[str, object]] = []
+        for entry_time, hash_value in recent_entries:
+            matched_cluster = None
+            for cluster in clusters:
+                if self._hamming_distance(cluster["hash"], hash_value) <= tolerance_bits:
+                    matched_cluster = cluster
+                    break
+
+            if matched_cluster is None:
+                clusters.append({
+                    "hash": hash_value,
+                    "count": 1,
+                    "first_seen": entry_time,
+                    "last_seen": entry_time
+                })
+            else:
+                matched_cluster["count"] += 1
+                if entry_time < matched_cluster["first_seen"]:
+                    matched_cluster["first_seen"] = entry_time
+                if entry_time > matched_cluster["last_seen"]:
+                    matched_cluster["last_seen"] = entry_time
+
+        clusters.sort(key=lambda item: item["count"], reverse=True)
+        dominant_cluster = clusters[0]
+
+        reuse_ratio = dominant_cluster["count"] / float(sample_count)
+        dominant_duration = float(dominant_cluster["last_seen"] - dominant_cluster["first_seen"])
+        unique_cluster_count = len(clusters)
+
+        raw_confidence = max(0.0, min(1.0, (reuse_ratio - 0.6) / 0.35))
+        if dominant_duration < 3.0:
+            raw_confidence = 0.0
+
+        # Smooth confidence over time to dampen noise
+        self._loop_detection_score = (
+            0.85 * self._loop_detection_score + 0.15 * raw_confidence
+        )
+        self._loop_detection_score = max(0.0, min(1.0, self._loop_detection_score))
+        stable_detected = self._loop_detection_score >= 0.6 and raw_confidence > 0.0
+
+        self.loop_detection_state.update({
+            "detected": stable_detected,
+            "confidence": float(self._loop_detection_score if stable_detected else raw_confidence),
+            "hash_reuse_ratio": reuse_ratio,
+            "samples_considered": sample_count,
+            "window_seconds": window_seconds,
+            "dominant_cluster_frames": dominant_cluster["count"],
+            "dominant_cluster_duration": dominant_duration,
+            "unique_cluster_count": unique_cluster_count,
+            "last_updated": timestamp,
+            "last_hash": frame_hash,
+        })
+
     
     def _smooth_metric(
         self,
@@ -341,6 +469,7 @@ class FocusMonitor:
         self.last_additional_face_boxes = []
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        self._update_loop_detector(gray)
         device_detected = self._detect_handheld_devices(frame)
 
         if self.face_mesh is not None:
@@ -808,9 +937,16 @@ class FocusMonitor:
             self.away_start_time = None
             self.away_timer = 0.0
 
+        alerts = list(dict.fromkeys(alerts))
+
         self.focus_score = 0.7 * frame_score + 0.3 * self.focus_score
         self.current_state = new_state
         self.last_status_text = status_text
+
+        loop_state = dict(self.loop_detection_state)
+        if loop_state.get("detected") and "looping_video" not in alerts:
+            alerts.append("looping_video")
+        alerts = list(dict.fromkeys(alerts))
 
         return {
             "success": True,
@@ -822,6 +958,7 @@ class FocusMonitor:
             "alerts": alerts,
             "faces_detected": faces_detected,
             "eyes_detected": eyes_detected,
+            "loop_detection": loop_state,
             "timestamp": time.time()
         }
     

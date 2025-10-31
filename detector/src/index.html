@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Camera Manipulation Detector</title>
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline';" />
+    <style>
+      body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        background-color: #0f172a;
+        color: #e2e8f0;
+        margin: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+      }
+      .card {
+        width: 360px;
+        background: rgba(15, 23, 42, 0.92);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 16px;
+        padding: 20px 28px 24px;
+        box-shadow: 0 20px 45px rgba(15, 23, 42, 0.5);
+      }
+      .card.running {
+        background: linear-gradient(135deg, rgba(14, 32, 54, 0.95), rgba(22, 63, 92, 0.95));
+        border-color: rgba(74, 222, 128, 0.45);
+        box-shadow: 0 20px 50px rgba(34, 197, 94, 0.25);
+      }
+      .card.suspicious {
+        background: linear-gradient(135deg, rgba(127, 29, 29, 0.95), rgba(69, 10, 10, 0.95));
+        border-color: rgba(248, 113, 113, 0.65);
+        box-shadow: 0 22px 55px rgba(248, 113, 113, 0.35);
+      }
+      h1 {
+        font-size: 1.2rem;
+        margin: 0 0 12px 0;
+        font-weight: 700;
+      }
+      p {
+        font-size: 0.9rem;
+        color: #94a3b8;
+        margin: 0 0 16px 0;
+      }
+      button {
+        width: 100%;
+        background: linear-gradient(135deg, #2563eb, #7c3aed);
+        border: none;
+        border-radius: 12px;
+        color: white;
+        font-weight: 600;
+        font-size: 0.95rem;
+        padding: 12px 0;
+        cursor: pointer;
+        transition: transform 0.1s ease, box-shadow 0.2s ease;
+      }
+      button:disabled {
+        background: rgba(148, 163, 184, 0.2);
+        cursor: not-allowed;
+      }
+      button:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 15px 30px rgba(63, 74, 191, 0.35);
+      }
+      button.secondary {
+        margin-top: 12px;
+        background: transparent;
+        border: 1px solid rgba(148, 163, 184, 0.35);
+        color: #e2e8f0;
+        font-weight: 500;
+        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+      }
+      button.secondary:not(:disabled):hover {
+        transform: none;
+        box-shadow: none;
+        background: rgba(148, 163, 184, 0.12);
+        border-color: rgba(148, 163, 184, 0.6);
+        color: #f8fafc;
+      }
+      button.secondary:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+        border-color: rgba(148, 163, 184, 0.2);
+      }
+      button.danger {
+        margin-top: 12px;
+        background: linear-gradient(135deg, #dc2626, #b91c1c);
+        border: none;
+        color: #fee2e2;
+        font-weight: 600;
+        transition: transform 0.1s ease, box-shadow 0.2s ease;
+      }
+      button.danger:not(:disabled):hover {
+        transform: translateY(-1px);
+        box-shadow: 0 18px 35px rgba(248, 113, 113, 0.35);
+      }
+      button.danger:disabled {
+        background: rgba(248, 113, 113, 0.25);
+        color: rgba(254, 226, 226, 0.7);
+        cursor: not-allowed;
+      }
+      .status {
+        margin-top: 18px;
+        border-radius: 12px;
+        padding: 14px;
+        background: rgba(30, 41, 59, 0.8);
+        border: 1px solid rgba(56, 189, 248, 0.15);
+        font-size: 0.85rem;
+      }
+      .status strong {
+        display: block;
+        font-size: 0.9rem;
+        margin-bottom: 6px;
+        color: #38bdf8;
+      }
+      .card.running .status {
+        border-color: rgba(74, 222, 128, 0.35);
+      }
+      .card.running .status strong {
+        color: #34d399;
+      }
+      .status span {
+        display: block;
+        color: #94a3b8;
+      }
+      .card.suspicious .status {
+        border-color: rgba(248, 113, 113, 0.55);
+        background: rgba(69, 10, 10, 0.75);
+      }
+      .card.suspicious .status strong {
+        color: #fca5a5;
+      }
+      .card.suspicious .status span {
+        color: #fecaca;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="card">
+      <h1>Camera Manipulation Detector</h1>
+      <p>Start the monitoring service to expose the local detection API. Use “Check Status” to refresh the latest scan on demand.</p>
+      <button id="startBtn">Start Monitoring</button>
+      <button id="stopBtn" class="danger" hidden>Stop Monitoring</button>
+      <button id="checkBtn" class="secondary" hidden>Check Status</button>
+      <div class="status" id="statusPanel" hidden>
+        <strong id="statusText">Status</strong>
+        <span id="details"></span>
+      </div>
+    </div>
+    <script type="module" src="./renderer.js"></script>
+  </body>
+</html>
