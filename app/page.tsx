@@ -50,10 +50,10 @@ export default function Home() {
     <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-slate-900 text-white' : 'bg-white text-gray-900'}`}
       style={{
         backgroundImage: isDark 
-          ? 'radial-gradient(circle, #3b82f6 1px, transparent 1px)' 
-          : 'radial-gradient(circle, #dbeafe 1px, transparent 1px)',
-        backgroundSize: '30px 30px',
-        backgroundPosition: '0 0, 15px 15px'
+          ? 'none' 
+          : 'radial-gradient(circle, #93c5fd 1px, transparent 1px)',
+        backgroundSize: isDark ? 'auto' : '25px 25px',
+        backgroundAttachment: 'fixed'
       }}
     >
       {/* Navigation */}
@@ -302,7 +302,9 @@ export default function Home() {
       <footer className={`border-t ${isDark ? 'border-slate-800 bg-slate-900/30' : 'border-gray-200'} py-12 px-6 lg:px-8`}>
         <div className="max-w-7xl mx-auto text-center">
           <div className="flex items-center justify-center gap-2 mb-4">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg" />
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-400 to-blue-600 rounded-lg flex items-center justify-center">
+              <span className="text-white font-bold text-sm">D</span>
+            </div>
             <span className="font-bold text-lg">Drishti</span>
           </div>
           <p className={`${isDark ? 'text-gray-400' : 'text-gray-600'} text-sm`}>
