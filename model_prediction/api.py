@@ -13,9 +13,20 @@ import binascii
 import json
 import time
 import logging
-from typing import Dict, List
+import platform
+from typing import Dict, List, Optional, Tuple
 import asyncio
 from starlette.websockets import WebSocketState
+
+try:
+    import mediapipe as mp
+except ImportError:  # Optional dependency
+    mp = None
+
+try:
+    from ultralytics import YOLO
+except ImportError:
+    YOLO = None
 
 # Initialize FastAPI app
 app = FastAPI(
@@ -41,6 +52,53 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+def _get_camera_backends() -> List[Tuple[str, Optional[int]]]:
+    """Build a list of backend candidates ordered by platform preference."""
+    system = platform.system().lower()
+    backends: List[str] = []
+
+    if system == "windows":
+        backends.extend(["CAP_DSHOW", "CAP_MSMF"])
+    elif system == "darwin":
+        backends.extend(["CAP_AVFOUNDATION", "CAP_QT"])
+    else:
+        backends.extend(["CAP_V4L2", "CAP_GSTREAMER"])
+
+    backends.append("CAP_ANY")
+
+    resolved: List[Tuple[str, Optional[int]]] = []
+    for name in backends:
+        value = getattr(cv2, name, None)
+        if value is not None:
+            resolved.append((name, value))
+    resolved.append(("default", None))
+    return resolved
+
+
+def _open_camera(device_index: int = 0) -> Optional[cv2.VideoCapture]:
+    """Try to open the camera across different OpenCV backends."""
+    tried: List[str] = []
+    for name, backend in _get_camera_backends():
+        if backend is None:
+            camera = cv2.VideoCapture(device_index)
+        else:
+            camera = cv2.VideoCapture(device_index, backend)
+
+        if camera is None:
+            tried.append(name)
+            continue
+
+        if camera.isOpened():
+            logger.info(f"Opened camera using backend {name}")
+            return camera
+
+        tried.append(name)
+        camera.release()
+
+    logger.error(f"Unable to open camera; tried backends: {', '.join(tried) or 'none'}")
+    return None
+
+
 class FocusMonitor:
     """Simplified focus monitoring without external model dependencies"""
     
@@ -54,250 +112,706 @@ class FocusMonitor:
         self.profile_cascade = cv2.CascadeClassifier(
             cv2.data.haarcascades + 'haarcascade_profileface.xml'
         )
+
+        self._mp_face_mesh = None
+        self.face_mesh = None
+        if mp is not None:
+            try:
+                self._mp_face_mesh = mp.solutions.face_mesh
+                self.face_mesh = self._mp_face_mesh.FaceMesh(
+                    static_image_mode=False,
+                    max_num_faces=3,
+                    refine_landmarks=True,
+                    min_detection_confidence=0.5,
+                    min_tracking_confidence=0.5
+                )
+                logger.info("MediaPipe FaceMesh initialized")
+            except Exception as mesh_error:
+                self.face_mesh = None
+                logger.warning(f"MediaPipe FaceMesh unavailable: {mesh_error}")
         
         self.focus_score = 100.0
         self.current_state = "focused"
         self.away_timer = 0.0
         self.away_start_time = None
         self.last_status_text = ""
+
+        # Cache for drawing overlays and temporal smoothing
+        self.last_face_box: Optional[Tuple[int, int, int, int]] = None
+        self.last_pupil_points: List[Tuple[int, int]] = []
+        self.last_head_pose: Optional[Dict[str, object]] = None
+        self.last_device_boxes: List[np.ndarray] = []
+        self.last_focus_details: Dict[str, float] = {}
+        self.last_additional_face_boxes: List[Tuple[int, int, int, int]] = []
+        self._metric_cache: Dict[str, float] = {}
+        self.device_presence_score: float = 0.0
+        self.phone_model = None
+        self.phone_target_classes = {"cell phone", "remote"}
+        self.phone_detection_enabled = False
+        self._phone_disabled_logged = False
+
+        if YOLO is None:
+            logger.error("ultralytics is not installed. Phone detection disabled.")
+        else:
+            try:
+                self.phone_model = YOLO("yolov8n.pt")
+                model_names = {
+                    name.strip().lower()
+                    for _, name in self.phone_model.names.items()
+                }
+                dynamic_targets = {
+                    name for name in model_names
+                    if "phone" in name or "remote" in name
+                }
+                if dynamic_targets:
+                    self.phone_target_classes = dynamic_targets
+                logger.info(
+                    "YOLO model loaded for phone detection; target classes: %s",
+                    ", ".join(sorted(self.phone_target_classes))
+                )
+                self.phone_detection_enabled = True
+            except Exception as phone_error:
+                self.phone_model = None
+                logger.error("Failed to initialize YOLO phone detector: %s", phone_error)
+                logger.error("Phone detection disabled until dependency issue is resolved.")
         
         logger.info("FocusMonitor initialized successfully")
 
-    def _detect_handheld_devices(self, gray_frame: np.ndarray) -> bool:
-        """Detect handheld electronic devices (phones/tablets) even when tilted."""
-        lower_start = gray_frame.shape[0] // 2
-        lower_gray = gray_frame[lower_start:, :]
+    def _detect_handheld_devices(self, frame: np.ndarray) -> bool:
+        """Detect handheld electronic devices using the YOLO model when available."""
+        if not self.phone_detection_enabled or self.phone_model is None:
+            if not self._phone_disabled_logged:
+                logger.warning("Phone detection disabled; YOLO unavailable.")
+                self._phone_disabled_logged = True
+            self.last_device_boxes = []
+            self.device_presence_score = self._smooth_metric(
+                "device_presence",
+                0.0,
+                alpha=0.2,
+                max_delta=0.2
+            )
+            return False
 
-        blurred = cv2.GaussianBlur(lower_gray, (7, 7), 0)
-        edges = cv2.Canny(blurred, 40, 120)
-        kernel = np.ones((3, 3), np.uint8)
-        edges = cv2.dilate(edges, kernel, iterations=1)
-        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel, iterations=2)
+        previous_boxes = list(self.last_device_boxes)
+        self.last_device_boxes = []
 
-        contours, _ = cv2.findContours(edges, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        try:
+            results = self.phone_model.predict(
+                frame,
+                classes=None,
+                conf=0.3,
+                verbose=False
+            )
+        except Exception as inference_error:
+            logger.error("Phone detection inference failed: %s", inference_error)
+            message = str(inference_error).lower()
+            if "numpy is not available" in message or "numpy" in message:
+                if not self._phone_disabled_logged:
+                    logger.error(
+                        "Disabling YOLO phone detection: dependency issue detected (%s).",
+                        inference_error
+                    )
+                    self._phone_disabled_logged = True
+                self.phone_detection_enabled = False
+                self.phone_model = None
+            self.last_device_boxes = []
+            self.device_presence_score = self._smooth_metric(
+                "device_presence",
+                0.0,
+                alpha=0.2,
+                max_delta=0.2
+            )
+            return False
 
-        for contour in contours:
-            area = cv2.contourArea(contour)
-            if area < 900:
-                continue
+        detections: List[Tuple[float, np.ndarray]] = []
+        for result in results:
+            boxes = result.boxes if hasattr(result, "boxes") else []
+            for box in boxes:
+                cls_index = int(box.cls[0])
+                class_name = str(result.names.get(cls_index, "")).strip().lower()
+                if class_name not in self.phone_target_classes:
+                    continue
+                conf = float(box.conf[0])
+                if conf < 0.3:
+                    continue
+                xyxy = box.xyxy[0].cpu().numpy()
+                x1, y1, x2, y2 = xyxy
+                rect_points = np.array(
+                    [
+                        [int(x1), int(y1)],
+                        [int(x2), int(y1)],
+                        [int(x2), int(y2)],
+                        [int(x1), int(y2)],
+                    ],
+                    dtype=np.int32
+                )
+                detections.append((conf, rect_points))
 
-            rect = cv2.minAreaRect(contour)
-            (_, _), (w, h), _ = rect
+        detections.sort(key=lambda item: item[0], reverse=True)
 
-            if w < 28 or h < 28:
-                continue
+        if detections:
+            self.last_device_boxes = [pts for _, pts in detections[:3]]
+        elif self.device_presence_score > 0.4 and previous_boxes:
+            self.last_device_boxes = previous_boxes
 
-            long_side = max(w, h)
-            short_side = min(w, h)
-            if short_side == 0:
-                continue
+        raw_presence = detections[0][0] if detections else 0.0
+        self.device_presence_score = self._smooth_metric(
+            "device_presence",
+            raw_presence,
+            alpha=0.3,
+            max_delta=0.3
+        )
 
-            aspect_ratio = long_side / short_side
-            if aspect_ratio > 5.0:
-                continue
+        if not detections and self.device_presence_score < 0.2:
+            self.last_device_boxes = []
 
-            rect_area = w * h
-            if rect_area <= 0:
-                continue
+        return self.device_presence_score >= 0.4
+    
+    
+    def _smooth_metric(
+        self,
+        key: str,
+        value: float,
+        alpha: float = 0.3,
+        max_delta: Optional[float] = None
+    ) -> float:
+        """Exponentially smooth noisy metric values to stabilise UI feedback."""
+        if not np.isfinite(value):
+            return self._metric_cache.get(key, 0.0)
+        previous = self._metric_cache.get(key)
+        if previous is None or not np.isfinite(previous):
+            smoothed = value
+        else:
+            smoothed = previous + alpha * (value - previous)
+            if max_delta is not None:
+                delta = smoothed - previous
+                if delta > max_delta:
+                    smoothed = previous + max_delta
+                elif delta < -max_delta:
+                    smoothed = previous - max_delta
+        self._metric_cache[key] = smoothed
+        return smoothed
 
-            solidity = area / rect_area
-            if solidity < 0.55:
-                continue
+    def _reset_pose_history(self) -> None:
+        """Clear cached pose/gaze metrics when tracking is unavailable."""
+        for metric_key in [
+            "pose_pitch",
+            "pose_yaw",
+            "pose_roll",
+            "gaze_left_h",
+            "gaze_right_h",
+            "gaze_left_v",
+            "gaze_right_v",
+        ]:
+            self._metric_cache.pop(metric_key, None)
+        self.last_head_pose = None
+        self.last_pupil_points = []
 
-            return True
+    @staticmethod
+    def _rotation_to_euler(rotation_matrix: np.ndarray) -> Tuple[float, float, float]:
+        """
+        Convert a rotation matrix into pitch, yaw, roll angles in degrees.
+        Pitch: positive looking down, Yaw: positive turning right, Roll: positive clockwise tilt.
+        """
+        r = rotation_matrix
+        sy = np.sqrt(r[0, 0] ** 2 + r[1, 0] ** 2)
+        singular = sy < 1e-6
 
-        return False
+        if not singular:
+            pitch = np.degrees(np.arctan2(-r[2, 0], sy))
+            yaw = np.degrees(np.arctan2(r[1, 0], r[0, 0]))
+            roll = np.degrees(np.arctan2(r[2, 1], r[2, 2]))
+        else:
+            pitch = np.degrees(np.arctan2(-r[2, 0], sy))
+            yaw = np.degrees(np.arctan2(-r[0, 1], r[1, 1]))
+            roll = 0.0
+
+        return pitch, yaw, roll
+
     
     def analyze_frame(self, frame: np.ndarray) -> Dict:
-        """Analyze a single frame and return focus metrics - EXACT LOGIC FROM WORKING main.py"""
-        
+        """Analyze a single frame and return focus metrics with head pose and gaze tracking."""
         if frame is None or frame.size == 0:
             return self._error_response("Invalid frame")
-        
+
+        self.last_face_box = None
+        self.last_pupil_points = []
+        self.last_head_pose = None
+        self.last_focus_details = {}
+        self.last_additional_face_boxes = []
+
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        device_detected = self._detect_handheld_devices(gray)
-        
-        # Detect faces (EXACT parameters from main.py)
+        device_detected = self._detect_handheld_devices(frame)
+
+        if self.face_mesh is not None:
+            try:
+                result = self._analyze_with_face_mesh(frame, device_detected)
+                if result is not None:
+                    return result
+            except Exception as mesh_error:
+                logger.error(f"Face mesh analysis failed: {mesh_error}", exc_info=True)
+
+        return self._analyze_with_cascades(frame, gray, device_detected)
+
+    def _analyze_with_face_mesh(
+        self,
+        frame: np.ndarray,
+        device_detected: bool
+    ) -> Optional[Dict]:
+        height, width = frame.shape[:2]
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        results = self.face_mesh.process(rgb)
+
+        if not results.multi_face_landmarks:
+            return None
+
+        multi_face_boxes: List[Tuple[int, int, int, int]] = []
+        primary_landmarks = None
+        landmark_points = None
+
+        face_candidates: List[Tuple[float, Tuple[int, int, int, int], np.ndarray, object]] = []
+
+        for face_landmarks in results.multi_face_landmarks:
+            points = np.array(
+                [(lm.x, lm.y, lm.z) for lm in face_landmarks.landmark],
+                dtype=np.float64
+            )
+            points[:, 0] *= width
+            points[:, 1] *= height
+            points[:, 2] *= width  # approximate depth scaling
+
+            min_x = int(max(np.min(points[:, 0]), 0))
+            min_y = int(max(np.min(points[:, 1]), 0))
+            max_x = int(min(np.max(points[:, 0]), width - 1))
+            max_y = int(min(np.max(points[:, 1]), height - 1))
+
+            center = ((min_x + max_x) / 2.0, (min_y + max_y) / 2.0)
+            frame_center = (width / 2.0, height / 2.0)
+            center_distance = np.linalg.norm(np.array(center) - np.array(frame_center))
+
+            face_area = (max_x - min_x) * (max_y - min_y)
+            frame_area = width * height
+            area_ratio = face_area / max(frame_area, 1)
+
+            center_score = max(0.0, 1.0 - center_distance / max(width, height))
+            area_score = min(max(area_ratio / 0.15, 0.0), 1.0)
+            combined_score = 0.6 * center_score + 0.4 * area_score
+
+            face_candidates.append((combined_score, (min_x, min_y, max_x, max_y), points, face_landmarks))
+
+        if not face_candidates:
+            return None
+
+        face_candidates.sort(key=lambda item: item[0], reverse=True)
+        best_score, best_box, best_points, best_landmarks = face_candidates[0]
+        landmark_points = best_points
+        primary_landmarks = best_landmarks
+        self.last_face_box = best_box
+
+        for _, box, points, landmarks in face_candidates[1:]:
+            multi_face_boxes.append(box)
+
+        if landmark_points is None:
+            return None
+
+        self.last_additional_face_boxes = multi_face_boxes
+
+        def _pt(idx: int) -> np.ndarray:
+            return landmark_points[idx, :2].copy()
+
+        left_eye_outer = _pt(33)
+        left_eye_inner = _pt(133)
+        left_eye_top = _pt(159)
+        left_eye_bottom = _pt(145)
+        right_eye_outer = _pt(263)
+        right_eye_inner = _pt(362)
+        right_eye_top = _pt(386)
+        right_eye_bottom = _pt(374)
+        left_pupil = _pt(468)
+        right_pupil = _pt(473)
+
+        clamp_min = np.array([0, 0], dtype=int)
+        clamp_max = np.array([width - 1, height - 1], dtype=int)
+
+        left_pupil_clamped = np.clip(np.round(left_pupil).astype(int), clamp_min, clamp_max)
+        right_pupil_clamped = np.clip(np.round(right_pupil).astype(int), clamp_min, clamp_max)
+
+        self.last_pupil_points = [
+            (int(left_pupil_clamped[0]), int(left_pupil_clamped[1])),
+            (int(right_pupil_clamped[0]), int(right_pupil_clamped[1]))
+        ]
+
+        faces_detected = 1 + len(self.last_additional_face_boxes)
+
+        def _ratio(center: np.ndarray, a: np.ndarray, b: np.ndarray) -> float:
+            denom = (b[0] - a[0])
+            if abs(denom) < 1e-3:
+                return 0.5
+            return float((center[0] - a[0]) / denom)
+
+        def _vertical_ratio(center: np.ndarray, top: np.ndarray, bottom: np.ndarray) -> float:
+            denom = (bottom[1] - top[1])
+            if abs(denom) < 1e-3:
+                return 0.5
+            return float((center[1] - top[1]) / denom)
+
+        left_horizontal_ratio = _ratio(left_pupil, left_eye_inner, left_eye_outer)
+        right_horizontal_ratio = _ratio(right_pupil, right_eye_inner, right_eye_outer)
+        left_vertical_ratio = _vertical_ratio(left_pupil, left_eye_top, left_eye_bottom)
+        right_vertical_ratio = _vertical_ratio(right_pupil, right_eye_top, right_eye_bottom)
+
+        left_horizontal_ratio = self._smooth_metric("gaze_left_h", left_horizontal_ratio, alpha=0.35, max_delta=0.08)
+        right_horizontal_ratio = self._smooth_metric("gaze_right_h", right_horizontal_ratio, alpha=0.35, max_delta=0.08)
+        left_vertical_ratio = self._smooth_metric("gaze_left_v", left_vertical_ratio, alpha=0.35, max_delta=0.08)
+        right_vertical_ratio = self._smooth_metric("gaze_right_v", right_vertical_ratio, alpha=0.35, max_delta=0.08)
+
+        pose_indices = [1, 152, 33, 263, 61, 291]
+        face_3d = landmark_points[pose_indices].astype(np.float64)
+        face_2d = face_3d[:, :2].astype(np.float64)
+
+        focal_length = width
+        center = (width / 2, height / 2)
+        camera_matrix = np.array([
+            [focal_length, 0, center[0]],
+            [0, focal_length, center[1]],
+            [0, 0, 1]
+        ], dtype=np.float64)
+        dist_coeffs = np.zeros((4, 1), dtype=np.float64)
+
+        success, rotation_vec, translation_vec = cv2.solvePnP(
+            face_3d,
+            face_2d,
+            camera_matrix,
+            dist_coeffs,
+            flags=cv2.SOLVEPNP_ITERATIVE
+        )
+
+        raw_pitch = raw_yaw = raw_roll = 0.0
+        axis_points_2d: Optional[np.ndarray] = None
+        origin_point: Optional[Tuple[int, int]] = None
+
+        if success:
+            rotation_matrix, _ = cv2.Rodrigues(rotation_vec)
+            raw_pitch, raw_yaw, raw_roll = self._rotation_to_euler(rotation_matrix)
+
+            nose_3d = face_3d[0]
+            nose_2d = face_2d[0]
+
+            axis = np.array([
+                [0.0, 0.0, 0.0],
+                [60.0, 0.0, 0.0],
+                [0.0, 60.0, 0.0],
+                [0.0, 0.0, 60.0]
+            ], dtype=np.float64)
+            axis_points, _ = cv2.projectPoints(
+                axis,
+                rotation_vec,
+                translation_vec,
+                camera_matrix,
+                dist_coeffs
+            )
+            axis_points_2d = axis_points.reshape(-1, 2).astype(int)
+            origin_point = tuple(np.clip(np.round(nose_2d).astype(int), [0, 0], [width - 1, height - 1]))
+            self.last_head_pose = {
+                "angles": (raw_pitch, raw_yaw, raw_roll),
+                "origin": origin_point,
+                "axis_points": axis_points_2d
+            }
+        else:
+            self.last_head_pose = None
+
+        if success:
+            pitch = self._smooth_metric("pose_pitch", raw_pitch, alpha=0.2, max_delta=5.0)
+            yaw = self._smooth_metric("pose_yaw", raw_yaw, alpha=0.2, max_delta=5.0)
+            roll = self._smooth_metric("pose_roll", raw_roll, alpha=0.2, max_delta=5.0)
+        else:
+            pitch = self._metric_cache.get("pose_pitch", 0.0) * 0.9
+            yaw = self._metric_cache.get("pose_yaw", 0.0) * 0.9
+            roll = self._metric_cache.get("pose_roll", 0.0) * 0.9
+            self._metric_cache["pose_pitch"] = pitch
+            self._metric_cache["pose_yaw"] = yaw
+            self._metric_cache["pose_roll"] = roll
+
+        if self.last_head_pose is not None:
+            self.last_head_pose["angles"] = (pitch, yaw, roll)
+
+        frame_score = 100.0
+        alerts: List[str] = []
+        status_parts: List[str] = []
+        new_state = "focused"
+
+        if faces_detected > 1:
+            alerts.append(f"multiple_faces:{faces_detected}")
+            status_parts.append(f"{faces_detected} faces detected")
+            frame_score = max(frame_score - min(30.0 * (faces_detected - 1), 70.0), 0.0)
+            new_state = "away"
+
+        pitch_deviation = max(0.0, abs(pitch) - 8.0)
+        yaw_deviation = max(0.0, abs(yaw) - 10.0)
+        roll_deviation = max(0.0, abs(roll) - 12.0)
+
+        frame_score -= min(pitch_deviation * 1.1, 30.0)
+        frame_score -= min(yaw_deviation * 1.1, 30.0)
+        frame_score -= min(roll_deviation * 0.75, 18.0)
+
+        if abs(pitch) > 28.0:
+            alerts.append(f"head_pitch:{pitch:.1f}")
+            status_parts.append("Head pitched")
+            new_state = "away"
+        if abs(yaw) > 32.0:
+            alerts.append(f"head_yaw:{yaw:.1f}")
+            status_parts.append("Looking sideways")
+            new_state = "away"
+        if abs(roll) > 28.0:
+            alerts.append(f"head_roll:{roll:.1f}")
+            status_parts.append("Head tilted")
+
+        horizontal_soft_bounds = (0.34, 0.66)
+        horizontal_hard_bounds = (0.27, 0.73)
+        vertical_soft_bounds = (0.37, 0.63)
+        vertical_hard_bounds = (0.30, 0.70)
+
+        horizontal_soft_ok = (
+            horizontal_soft_bounds[0] <= left_horizontal_ratio <= horizontal_soft_bounds[1] and
+            horizontal_soft_bounds[0] <= right_horizontal_ratio <= horizontal_soft_bounds[1]
+        )
+        horizontal_hard_violation = (
+            left_horizontal_ratio < horizontal_hard_bounds[0] or
+            left_horizontal_ratio > horizontal_hard_bounds[1] or
+            right_horizontal_ratio < horizontal_hard_bounds[0] or
+            right_horizontal_ratio > horizontal_hard_bounds[1]
+        )
+
+        vertical_soft_ok = (
+            vertical_soft_bounds[0] <= left_vertical_ratio <= vertical_soft_bounds[1] and
+            vertical_soft_bounds[0] <= right_vertical_ratio <= vertical_soft_bounds[1]
+        )
+        vertical_hard_violation = (
+            left_vertical_ratio < vertical_hard_bounds[0] or
+            left_vertical_ratio > vertical_hard_bounds[1] or
+            right_vertical_ratio < vertical_hard_bounds[0] or
+            right_vertical_ratio > vertical_hard_bounds[1]
+        )
+
+        if horizontal_hard_violation:
+            frame_score -= 22.0
+            alerts.append("gaze_horizontal_off")
+            status_parts.append("Eyes off-center")
+            new_state = "away"
+        elif not horizontal_soft_ok:
+            frame_score -= 10.0
+            status_parts.append("Eyes drifting sideways")
+
+        if vertical_hard_violation:
+            frame_score -= 18.0
+            alerts.append("gaze_vertical_off")
+            status_parts.append("Eyes off-vertical")
+            new_state = "away"
+        elif not vertical_soft_ok:
+            frame_score -= 8.0
+            status_parts.append("Eyes drifting up/down")
+
+        gaze_ok = horizontal_soft_ok and vertical_soft_ok
+
+        if gaze_ok and new_state == "focused" and not status_parts:
+            status_parts.append("Focused on screen")
+        elif not status_parts:
+            status_parts.append("Analyzing")
+
+        if device_detected:
+            frame_score = max(frame_score - 40.0, 0.0)
+            if "device_detected" not in alerts:
+                alerts.append("device_detected")
+            status_parts.append("Device detected")
+            new_state = "away"
+
+        frame_score = max(0.0, min(100.0, frame_score))
+        alerts = list(dict.fromkeys(alerts))
+
+        status_text = " | ".join(status_parts)
+        status_text = f"{status_text} | pitch:{pitch:.1f}° yaw:{yaw:.1f}° roll:{roll:.1f}°"
+
+        self.last_focus_details = {
+            "pitch": pitch,
+            "yaw": yaw,
+            "roll": roll,
+            "left_horizontal_ratio": left_horizontal_ratio,
+            "right_horizontal_ratio": right_horizontal_ratio,
+            "left_vertical_ratio": left_vertical_ratio,
+            "right_vertical_ratio": right_vertical_ratio,
+            "gaze_ok": gaze_ok,
+            "device_presence": self.device_presence_score,
+            "faces_detected": faces_detected,
+            "multi_face_count": faces_detected
+        }
+
+        return self._finalize_result(
+            frame_score=frame_score,
+            status_text=status_text,
+            new_state=new_state,
+            alerts=alerts,
+            faces_detected=faces_detected,
+            eyes_detected=2
+        )
+
+    def _analyze_with_cascades(
+        self,
+        frame: np.ndarray,
+        gray: np.ndarray,
+        device_detected: bool
+    ) -> Dict:
+        self._reset_pose_history()
+
         faces = self.face_cascade.detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
         )
-        
-        # Detect profiles (right)
+
+        additional_boxes: List[Tuple[int, int, int, int]] = []
+
         profile_faces_right = self.profile_cascade.detectMultiScale(
             gray, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
         )
-        
-        # Detect profiles (left) - flip image
+
         gray_flipped = cv2.flip(gray, 1)
         profile_faces_left = self.profile_cascade.detectMultiScale(
             gray_flipped, scaleFactor=1.1, minNeighbors=5, minSize=(80, 80)
         )
-        
-        # Adjust left profile coordinates
+
         profile_faces_left_adjusted = []
         for (x, y, w, h) in profile_faces_left:
             x_adjusted = frame.shape[1] - x - w
             profile_faces_left_adjusted.append((x_adjusted, y, w, h))
-        
-        # Calculate focus score
-        frame_score = 0.0
-        status_text = "Unknown"
-        new_state = "unknown"
-        alerts = []
-        
+
+        frame_score = 10.0
+        status_text = "No face detected"
+        new_state = "away"
+        alerts: List[str] = []
+        eyes_detected = 0
+
         if len(faces) > 0:
-            # Frontal face detected - EXACT LOGIC FROM main.py
-            face = faces[0]
-            x, y, w, h = face
-            frame_score = 60.0  # Base score - face visible and frontal
-            
-            roi_gray = gray[y:y+h, x:x+w]
-            
-            # Initialize eyes variable to prevent UnboundLocalError
-            eyes = []
-            
-            # Check if face is too high FIRST (BEFORE any scoring)
-            frame_center_y = frame.shape[0] // 2
-            frame_top_15_percent = frame.shape[0] * 0.15
-            face_center_y = y + h//2
-            
-            # PRIORITY 1: Face in top 15% of frame = LOOKING WAY ABOVE CAMERA
-            if y < frame_top_15_percent:
-                frame_score = 10.0  # Extremely low - OVERRIDES everything
-                status_text = "<!> LOOKING ABOVE CAMERA - COPYING?"
-                new_state = "away"
-                alerts.append("above_camera_copying")
-            
-            # PRIORITY 2: Face significantly above center (looking up moderately)
-            elif face_center_y < frame_center_y - 80:
-                frame_score = 25.0  # Low score - OVERRIDES base
-                status_text = "<!> HEAD TILTED UP (SUSPICIOUS)"
-                new_state = "away"
-                alerts.append("head_tilted_up")
-            
-            # NORMAL PROCESSING: Only if NOT looking above
-            else:
-                # Detect eyes (EXACT parameters from main.py)
-                eyes = self.eye_cascade.detectMultiScale(
-                    roi_gray,
-                    scaleFactor=1.05,  # More sensitive
-                    minNeighbors=3,    # Lower threshold
-                    minSize=(10, 10)   # Smaller minimum size
-                )
-                
-                # Score based on eye detection (EXACT scoring from main.py)
-                if len(eyes) >= 2:
-                    frame_score += 30.0  # Both eyes visible = +30
-                    status_text = "Both Eyes Visible"
-                    
-                    # Eye position analysis (EXACT from main.py)
-                    avg_eye_y = sum([ey + eh//2 for (ex, ey, ew, eh) in eyes[:2]]) / min(2, len(eyes))
-                    
-                    # LOOKING UP detection (eyes in upper 25% of face)
-                    if avg_eye_y < h * 0.25:
-                        frame_score = 15.0  # Very low - looking up (COPYING?)
-                        status_text = "<!> LOOKING UP - COPYING?"
-                        new_state = "away"
-                        alerts.append("looking_up_copying")
-                    
-                    # Good eye position (25-55% of face height)
-                    elif avg_eye_y < h * 0.55:
-                        frame_score += 15.0  # Good eye position = +15
-                        status_text = ">> FOCUSED ON SCREEN"
-                        new_state = "focused"
-                    
-                    # LOOKING DOWN (eyes in lower 45% of face)
-                    else:
-                        status_text = "Looking Down"
-                        frame_score -= 15.0  # Penalty for looking down
-                        new_state = "looking_down"
-                        alerts.append("looking_down")
-                        
-                elif len(eyes) == 1:
-                    frame_score += 15.0  # One eye = probably side angle
-                    status_text = "Side Angle - One Eye"
-                    new_state = "focused"
-                else:
-                    # No eyes detected
-                    frame_score += 10.0  # Small bonus for frontal face
-                    status_text = "Eyes Not Detected"
-                    new_state = "unknown"
-                
-                # DIAGONAL DETECTION (EXACT from main.py)
-                face_center_x = x + w//2
-                frame_center_x = frame.shape[1] // 2
-                
-                x_offset = abs(face_center_x - frame_center_x)
-                y_offset = abs(face_center_y - frame_center_y)
-                
-                corner_threshold_x = frame.shape[1] * 0.3
-                corner_threshold_y = frame.shape[0] * 0.3
-                
-                if x_offset > corner_threshold_x and y_offset > corner_threshold_y:
-                    frame_score = min(frame_score, 20.0)  # Cap at 20%
-                    status_text = "<!> LOOKING DIAGONAL (AWAY)"
-                    new_state = "away"
-                    alerts.append("diagonal_viewing")
-                
-                # Face size bonus (EXACT from main.py)
-                face_area = w * h
+            face_candidates: List[Tuple[float, Tuple[int, int, int, int]]] = []
+            frame_center = (frame.shape[1] / 2.0, frame.shape[0] / 2.0)
+
+            for (fx, fy, fw, fh) in faces:
+                cx = fx + fw / 2.0
+                cy = fy + fh / 2.0
+                center_distance = np.linalg.norm(np.array([cx, cy]) - np.array(frame_center))
+                face_area = fw * fh
                 frame_area = frame.shape[0] * frame.shape[1]
-                face_ratio = face_area / frame_area
-                
-                if face_ratio > 0.02:
-                    size_bonus = min(15.0, face_ratio * 300)
-                    frame_score += size_bonus
-                elif face_ratio < 0.01:
-                    frame_score -= 15.0
-                    if "LOOKING" not in status_text:
-                        status_text += " (Too Far)"
-            
-        elif len(profile_faces_right) > 0 or len(profile_faces_left_adjusted) > 0:
-            # Profile detected - away from screen (EXACT from main.py)
-            frame_score = 10.0  # Very low score
-            new_state = "away"
-            
-            if len(profile_faces_right) > 0:
-                status_text = "<!> LOOKING RIGHT (AWAY)"
-                alerts.append("looking_right")
+                area_ratio = face_area / max(frame_area, 1)
+
+                center_score = max(0.0, 1.0 - center_distance / max(frame.shape[1], frame.shape[0]))
+                area_score = min(max(area_ratio / 0.15, 0.0), 1.0)
+                combined_score = 0.6 * center_score + 0.4 * area_score
+
+                face_candidates.append((combined_score, (fx, fy, fw, fh)))
+
+            face_candidates.sort(key=lambda item: item[0], reverse=True)
+
+            best_score, (x, y, w, h) = face_candidates[0]
+            self.last_face_box = (x, y, x + w, y + h)
+
+            for _, (fx, fy, fw, fh) in face_candidates[1:]:
+                additional_boxes.append((fx, fy, fx + fw, fy + fh))
+
+            self.last_additional_face_boxes = additional_boxes
+            roi_gray = gray[y:y + h, x:x + w]
+
+            eyes = self.eye_cascade.detectMultiScale(
+                roi_gray,
+                scaleFactor=1.05,
+                minNeighbors=3,
+                minSize=(10, 10)
+            )
+            eyes_detected = len(eyes)
+
+            self.last_pupil_points = []
+            for (ex, ey, ew, eh) in eyes[:2]:
+                eye_center = (x + ex + ew // 2, y + ey + eh // 2)
+                self.last_pupil_points.append(eye_center)
+
+            frame_score = 65.0
+            status_text = "Face detected - limited tracking"
+            new_state = "focused"
+
+            if len(eyes) >= 2:
+                frame_score += 15.0
+            elif len(eyes) == 1:
+                frame_score += 5.0
             else:
-                status_text = "<!> LOOKING LEFT (AWAY)"
-                alerts.append("looking_left")
-        
-        else:
-            # No face detected (EXACT from main.py)
-            frame_score = 0.0
-            status_text = "NO FACE DETECTED"
+                frame_score -= 10.0
+                alerts.append("eyes_not_detected")
+
+        elif len(profile_faces_right) > 0 or len(profile_faces_left_adjusted) > 0:
+            frame_score = 15.0
             new_state = "away"
+            status_text = "Profile detected - looking away"
+            if len(profile_faces_right) > 0:
+                alerts.append("looking_right")
+            if len(profile_faces_left_adjusted) > 0:
+                alerts.append("looking_left")
+            self.last_additional_face_boxes = []
+        else:
             alerts.append("no_face")
-        
+            self.last_additional_face_boxes = []
+
+        faces_detected_total = max(len(faces), 0)
+        if faces_detected_total > 1:
+            alerts.append(f"multiple_faces:{faces_detected_total}")
+            status_text = f"{faces_detected_total} faces detected"
+            frame_score = max(frame_score - min(30.0 * (faces_detected_total - 1), 70.0), 0.0)
+            new_state = "away"
+
         if device_detected:
             frame_score = max(frame_score - 35.0, 0.0)
-            status_text = "⚠ DEVICE DETECTED"
-            new_state = "away"
+            status_text = "Device detected"
             if "device_detected" not in alerts:
                 alerts.append("device_detected")
-        
+            new_state = "away"
+
         frame_score = max(0.0, min(100.0, frame_score))
-        
-        # Update away timer (EXACT logic from main.py)
+        alerts = list(dict.fromkeys(alerts))
+
+        self.last_focus_details = {
+            "device_presence": self.device_presence_score,
+            "faces_detected": faces_detected_total,
+            "eyes_detected": eyes_detected,
+            "multi_face_count": faces_detected_total
+        }
+
+        return self._finalize_result(
+            frame_score=frame_score,
+            status_text=status_text,
+            new_state=new_state,
+            alerts=alerts,
+            faces_detected=faces_detected_total,
+            eyes_detected=eyes_detected
+        )
+
+    def _finalize_result(
+        self,
+        frame_score: float,
+        status_text: str,
+        new_state: str,
+        alerts: List[str],
+        faces_detected: int,
+        eyes_detected: int
+    ) -> Dict:
         current_time = time.time()
         if new_state == "away":
             if self.away_start_time is None:
                 self.away_start_time = current_time
             self.away_timer = current_time - self.away_start_time
-            
-            if self.away_timer >= 5.0:
+            if self.away_timer >= 5.0 and "away_5_seconds" not in alerts:
                 alerts.append("away_5_seconds")
         else:
             self.away_start_time = None
             self.away_timer = 0.0
-        
-        # Update focus score with smoothing (EXACT from main.py - 70% new, 30% old)
+
         self.focus_score = 0.7 * frame_score + 0.3 * self.focus_score
         self.current_state = new_state
         self.last_status_text = status_text
-        
+
         return {
             "success": True,
             "focus_score": round(self.focus_score, 2),
@@ -306,10 +820,11 @@ class FocusMonitor:
             "state": new_state,
             "away_timer": round(self.away_timer, 2),
             "alerts": alerts,
-            "faces_detected": len(faces),
-            "eyes_detected": len(eyes) if len(faces) > 0 and 'eyes' in locals() else 0,
+            "faces_detected": faces_detected,
+            "eyes_detected": eyes_detected,
             "timestamp": time.time()
         }
+    
     
     def _error_response(self, message: str) -> Dict:
         return {
@@ -461,14 +976,14 @@ def generate_webcam_frames():
     """Generator for webcam video stream with proper cleanup"""
     camera = None
     try:
-        camera = cv2.VideoCapture(0, cv2.CAP_DSHOW)  # Use DirectShow on Windows
+        camera = _open_camera()
+        if camera is None:
+            logger.error("Failed to open camera after backend probe")
+            return
+
         camera.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
         camera.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         camera.set(cv2.CAP_PROP_FPS, 30)
-        
-        if not camera.isOpened():
-            logger.error("Failed to open camera")
-            return
         
         logger.info("Webcam stream started")
         frame_count = 0
@@ -509,6 +1024,36 @@ def generate_webcam_frames():
             # Draw state
             cv2.putText(frame, f"State: {result['state'].upper()}", (10, 110),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 255, 255), 2)
+
+            # Draw head pose axes
+            pose_info = monitor.last_head_pose
+            if pose_info and pose_info.get("axis_points") is not None and pose_info.get("origin") is not None:
+                origin = tuple(pose_info["origin"])
+                axis_points = pose_info["axis_points"]
+                if axis_points is not None and len(axis_points) >= 4:
+                    cv2.line(frame, origin, tuple(axis_points[1]), (0, 0, 255), 2)  # X-axis
+                    cv2.line(frame, origin, tuple(axis_points[2]), (0, 255, 0), 2)  # Y-axis
+                    cv2.line(frame, origin, tuple(axis_points[3]), (255, 0, 0), 2)  # Z-axis
+
+            # Draw face bounding box
+            if monitor.last_face_box:
+                fx1, fy1, fx2, fy2 = monitor.last_face_box
+                cv2.rectangle(frame, (fx1, fy1), (fx2, fy2), (255, 255, 0), 2)
+
+            if monitor.last_additional_face_boxes:
+                for idx, (ax1, ay1, ax2, ay2) in enumerate(monitor.last_additional_face_boxes, start=1):
+                    cv2.rectangle(frame, (ax1, ay1), (ax2, ay2), (0, 0, 255), 2)
+                    cv2.putText(frame, f"FACE {idx+1}", (ax1, max(ay1 - 10, 0)),
+                                cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+
+            # Draw pupils
+            for pupil in monitor.last_pupil_points:
+                cv2.circle(frame, pupil, 4, (0, 255, 255), -1)
+
+            # Draw detected device boxes
+            if monitor.last_device_boxes:
+                for box in monitor.last_device_boxes:
+                    cv2.polylines(frame, [box], True, (0, 140, 255), 2)
             
             # Draw away timer if active
             if result["away_timer"] > 0:
@@ -608,12 +1153,11 @@ if __name__ == "__main__":
         # Run without SSL for now to test basic functionality
         uvicorn.run(
             app,
-            host="0.0.0.0",
-            port=8000,
+            host="127.0.0.1",
+            port=8080,
             log_level="info"
         )
     except Exception as e:
         logger.error(f"Failed to start server: {e}", exc_info=True)
         import sys
         sys.exit(1)
-
