@@ -116,7 +116,7 @@ export default function DashboardPage() {
         exam_id,
         exams (
           id,
-          title,
+          name,
           description,
           duration_minutes
         )
@@ -240,7 +240,7 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{exam.title}</h3>
+                        <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{exam.name}</h3>
                         {isExamActive(exam) && (
                           <span className={`px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 border ${isDark ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-green-100 text-green-700 border-green-300'}`}> 
                             <span className="relative flex h-2 w-2">
@@ -308,7 +308,7 @@ export default function DashboardPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{session.exams?.title || 'Exam'}</h3>
+                        <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{session.exams?.name || 'Exam'}</h3>
                         {session.status === 'flagged' ? (
                           <span className={`px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 border ${isDark ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-red-100 text-red-700 border-red-300'}`}>
                             <span>⚠️</span>

@@ -17,7 +17,7 @@ interface Snapshot {
   }
   exam: {
     id: string
-    title: string
+    name: string
     start_time: string
     end_time: string
   }
@@ -207,7 +207,7 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
                       {snapshot.student.name}
                     </p>
                     <p className={`text-xs ${isDark ? 'text-white/50' : 'text-gray-500'}`}>
-                      {snapshot.exam.title}
+                      {snapshot.exam.name}
                     </p>
                   </div>
                   
@@ -273,7 +273,7 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
                 </div>
                 <div>
                   <p className="text-sm font-medium opacity-60">Exam</p>
-                  <p className="text-lg font-bold">{selectedSnapshot.exam.title}</p>
+                  <p className="text-lg font-bold">{selectedSnapshot.exam.name}</p>
                 </div>
                 <div>
                   <p className="text-sm font-medium opacity-60">Captured At</p>

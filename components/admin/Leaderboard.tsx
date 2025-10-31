@@ -57,7 +57,7 @@ export default function Leaderboard({ examId, onSelectStudent, isDark = true }: 
           status,
           exams (
             id,
-            title
+            name
           ),
           profiles (
             id,
@@ -126,7 +126,7 @@ export default function Leaderboard({ examId, onSelectStudent, isDark = true }: 
           student_id: session.student_id,
           student_name: session.profiles?.full_name || 'Unknown Student',
           session_id: session.id,
-          exam_title: session.exams?.title || 'Unknown Exam',
+          exam_title: session.exams?.name || 'Unknown Exam',
           cheat_score: avgScore,
           confidence: 0,
           status: session.status,

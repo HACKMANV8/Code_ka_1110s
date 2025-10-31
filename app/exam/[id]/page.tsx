@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
+import type { ExamQuestion } from '@/lib/types/database';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
 export const dynamic = 'force-dynamic'
@@ -32,11 +33,79 @@ export default function ExamPage() {
   const [currentScore, setCurrentScore] = useState(100);
   const [status, setStatus] = useState('Ready to start');
   const [alerts, setAlerts] = useState<string[]>([]);
-  const [questions, setQuestions] = useState<string[]>([]);
+  const [questions, setQuestions] = useState<ExamQuestion[]>([]);
   const [manualAlerts, setManualAlerts] = useState<string[]>([]);
   const [isDesktop, setIsDesktop] = useState(false);
   const [questionPaneWidth, setQuestionPaneWidth] = useState(0.65);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
+  
+  type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
+  
+  const normalizeQuestion = (raw: unknown): ParsedQuestion | null => {
+    if (!raw) {
+      return null;
+    }
+
+    if (typeof raw === 'string') {
+      return {
+        id: undefined,
+        prompt: raw,
+        type: 'text',
+      };
+    }
+
+    if (typeof raw === 'object') {
+      const candidate = raw as Record<string, unknown>;
+      const prompt =
+        typeof candidate.prompt === 'string'
+          ? candidate.prompt
+          : typeof candidate.question === 'string'
+          ? candidate.question
+          : null;
+
+      if (!prompt) {
+        return null;
+      }
+
+      const typeCandidate = typeof candidate.type === 'string' ? candidate.type : 'text';
+      const type: ExamQuestion['type'] = typeCandidate === 'mcq' ? 'mcq' : 'text';
+      const rawId = candidate.id;
+      const parsedId = typeof rawId === 'number' && rawId > 0 ? rawId : undefined;
+
+      const optionsSource = Array.isArray(candidate.options) ? candidate.options : [];
+      const options = optionsSource
+        .map((optionRaw) => {
+          if (typeof optionRaw === 'string') {
+            return { text: optionRaw, isCorrect: false };
+          }
+          if (optionRaw && typeof optionRaw === 'object') {
+            const option = optionRaw as Record<string, unknown>;
+            const text =
+              typeof option.text === 'string'
+                ? option.text
+                : typeof option.option_text === 'string'
+                ? option.option_text
+                : null;
+            if (!text) {
+              return null;
+            }
+            const isCorrectRaw = option.isCorrect ?? option.is_correct;
+            const isCorrect = typeof isCorrectRaw === 'boolean' ? isCorrectRaw : false;
+            return { text, isCorrect };
+          }
+          return null;
+        })
+        .filter((item): item is { text: string; isCorrect: boolean } => item !== null);
+
+      if (type === 'mcq') {
+        return { id: parsedId, prompt, type, options };
+      }
+
+      return { id: parsedId, prompt, type: 'text' };
+    }
+
+    return null;
+  };
   
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -177,7 +246,7 @@ export default function ExamPage() {
         // Fetch exam details
         const { data: exam } = await supabase
           .from('exams')
-          .select('title, questions')
+        .select('name, questions')
           .eq('id', examId)
           .single();
 
@@ -187,27 +256,48 @@ export default function ExamPage() {
           return;
         }
 
-        setExamTitle(exam.title);
-        if (exam.questions) {
-          if (Array.isArray(exam.questions)) {
-            setQuestions(exam.questions.filter((item: unknown) => typeof item === 'string') as string[]);
-          } else if (typeof exam.questions === 'string') {
-            try {
-              const parsed = JSON.parse(exam.questions);
-              if (Array.isArray(parsed)) {
-                setQuestions(parsed.filter((item: unknown) => typeof item === 'string') as string[]);
-              } else {
-                setQuestions([]);
-              }
-            } catch {
-              setQuestions([]);
-            }
-          } else {
-            setQuestions([]);
+        setExamTitle(exam.name);
+
+        const finalizeQuestions = (items: ParsedQuestion[]): ExamQuestion[] =>
+          items.map((item, index) => ({
+            id: item.id && item.id > 0 ? item.id : index + 1,
+            prompt: item.prompt,
+            type: item.type,
+            ...(item.type === 'mcq' ? { options: item.options ?? [] } : {}),
+          }));
+
+        const extractQuestions = (raw: unknown): ExamQuestion[] => {
+          if (!raw) {
+            return [];
           }
-        } else {
-          setQuestions([]);
-        }
+
+          if (Array.isArray(raw)) {
+            const parsed = raw
+              .map((item) => normalizeQuestion(item))
+              .filter((item): item is ParsedQuestion => item !== null)
+              .slice(0, 50);
+            return finalizeQuestions(parsed);
+          }
+
+          if (typeof raw === 'string') {
+            try {
+              const parsed = JSON.parse(raw);
+              if (Array.isArray(parsed)) {
+                const questions = parsed
+                  .map((item) => normalizeQuestion(item))
+                  .filter((item): item is ParsedQuestion => item !== null)
+                  .slice(0, 50);
+                return finalizeQuestions(questions);
+              }
+            } catch (error) {
+              console.warn('Failed to parse questions JSON', error);
+            }
+          }
+
+          return [];
+        };
+
+        setQuestions(extractQuestions(exam.questions));
 
         // Start exam session
         const response = await fetch('/api/exam/start', {
@@ -912,20 +1002,45 @@ export default function ExamPage() {
                     ) : (
                       questions.map((question, index) => (
                         <div
-                          key={index}
+                          key={question.id}
                           className="rounded-lg border border-white/10 bg-white/5 backdrop-blur-sm p-5 hover:border-[#FD366E]/50 hover:bg-white/[0.07] transition-all duration-200"
                         >
                           <div className="flex items-start gap-3">
                             <span className="flex-shrink-0 w-8 h-8 bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] rounded-lg flex items-center justify-center text-white text-sm font-bold shadow-lg shadow-pink-500/20">
-                              {index + 1}
+                              {question.id ?? index + 1}
                             </span>
                             <div className="flex-1 pt-1">
-                              <p className="text-white leading-relaxed">{question}</p>
-                              <textarea
-                                className="mt-4 w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/40 focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] outline-none resize-none transition-all"
-                                rows={3}
-                                placeholder="Type your answer here..."
-                              />
+                              <p className="text-white leading-relaxed">{question.prompt}</p>
+                              {question.type === 'mcq' ? (
+                                <div className="mt-4 space-y-2">
+                                  {question.options && question.options.length > 0 ? (
+                                    question.options.map((option, optionIndex) => (
+                                      <label
+                                        key={optionIndex}
+                                        className="flex items-center gap-3 rounded-lg bg-white/5 border border-white/10 px-3 py-2 text-white/80"
+                                      >
+                                        <input
+                                          type="radio"
+                                      name={`question-${question.id}`}
+                                          className="h-4 w-4 text-[#FD366E] focus:ring-[#FD366E]"
+                                          disabled
+                                        />
+                                        <span>{option.text}</span>
+                                      </label>
+                                    ))
+                                  ) : (
+                                    <p className="text-sm text-white/60 mt-3">
+                                      No answer options have been provided yet.
+                                    </p>
+                                  )}
+                                </div>
+                              ) : (
+                                <textarea
+                                  className="mt-4 w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white placeholder-white/40 focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] outline-none resize-none transition-all"
+                                  rows={3}
+                                  placeholder="Type your answer here..."
+                                />
+                              )}
                             </div>
                           </div>
                         </div>

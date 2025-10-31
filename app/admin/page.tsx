@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import Leaderboard from '@/components/admin/Leaderboard'
 import LiveVideoViewer from '@/components/admin/LiveVideoViewer'
 import SnapshotViewer from '@/components/admin/SnapshotViewer'
@@ -133,16 +134,28 @@ export default function AdminPage() {
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
-        <div className="mb-8">
-          <h2 className={`text-3xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
-            {activeTab === 'live' ? 'Live Exam Monitoring' : 'Student Snapshots Archive'}
-          </h2>
-          <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-            {activeTab === 'live' 
-              ? 'Real-time average cheat score tracking'
-              : 'Review and download captured suspicious activity snapshots'
-            }
-          </p>
+        <div className="mb-8 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className={`text-3xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
+              {activeTab === 'live' ? 'Live Exam Monitoring' : 'Student Snapshots Archive'}
+            </h2>
+            <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
+              {activeTab === 'live' 
+                ? 'Real-time average cheat score tracking'
+                : 'Review and download captured suspicious activity snapshots'
+              }
+            </p>
+          </div>
+          <Link
+            href="/admin/create-exam"
+            className={`inline-flex items-center justify-center rounded-lg px-5 py-3 text-sm font-semibold transition-colors ${
+              isDark
+                ? 'bg-blue-600 text-white hover:bg-blue-500'
+                : 'bg-blue-600 text-white hover:bg-blue-700'
+            }`}
+          >
+            + Create Exam
+          </Link>
         </div>
 
         {/* Tabs */}
@@ -182,7 +195,7 @@ export default function AdminPage() {
               >
                 <option value="">All Active Exams</option>
                 {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>{exam.title}</option>
+                  <option key={exam.id} value={exam.id}>{exam.name}</option>
                 ))}
               </select>
             </div>

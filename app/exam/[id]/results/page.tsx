@@ -37,12 +37,12 @@ export default function ExamResultsPage() {
         // Fetch exam details
         const { data: exam } = await supabase
           .from('exams')
-          .select('title')
+          .select('name')
           .eq('id', examId)
           .single();
 
         if (exam) {
-          setExamTitle(exam.title);
+          setExamTitle(exam.name);
         }
 
         setLoading(false);

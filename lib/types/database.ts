@@ -6,9 +6,23 @@ export interface Profile {
   updated_at: string;
 }
 
+export type ExamQuestionType = "text" | "mcq";
+
+export interface ExamQuestionOption {
+  text: string;
+  isCorrect: boolean;
+}
+
+export interface ExamQuestion {
+  id: number;
+  prompt: string;
+  type: ExamQuestionType;
+  options?: ExamQuestionOption[];
+}
+
 export interface Exam {
   id: string;
-  title: string;
+  name: string;
   description: string | null;
   duration_minutes: number;
   start_time: string;
@@ -16,6 +30,7 @@ export interface Exam {
   created_by: string;
   created_at: string;
   updated_at: string;
+  questions: ExamQuestion[] | null;
 }
 
 export interface ExamSession {
