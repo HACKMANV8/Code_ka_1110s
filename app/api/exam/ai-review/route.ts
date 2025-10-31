@@ -94,7 +94,31 @@ export async function POST(request: NextRequest) {
 
     const questions = exam.questions as Question[];
     
-    // Build comprehensive prompt
+    // Try RAG system first, fallback to Gemini if it fails
+    const useRAG = process.env.RAG_API_URL && process.env.RAG_API_URL !== '';
+    
+    if (useRAG) {
+      try {
+        console.log('Using RAG system for AI review...');
+        const ragReview = await getRAGReview(
+          exam.name,
+          questions,
+          answers || [],
+          result
+        );
+        
+        return NextResponse.json({
+          review: ragReview.text,
+          method: 'rag',
+          sources: ragReview.sources || []
+        });
+      } catch (ragError) {
+        console.error('RAG system failed, falling back to Gemini:', ragError);
+        // Continue to Gemini fallback below
+      }
+    }
+    
+    // Build comprehensive prompt for Gemini
     const prompt = buildComprehensiveReviewPrompt(
       exam.name,
       questions,
@@ -219,6 +243,71 @@ Performance Summary:
 Format your response in clear sections with markdown formatting.`;
 
   return prompt;
+}
+
+/**
+ * Get AI review using RAG system
+ */
+async function getRAGReview(
+  examName: string,
+  questions: Question[],
+  answers: any[],
+  result: any
+): Promise<{ text: string; sources?: any[] }> {
+  const ragApiUrl = process.env.RAG_API_URL || 'http://localhost:8001';
+  
+  // Build context about the student's performance
+  const performanceSummary = `
+Exam: ${examName}
+Total Questions: ${questions.length}
+Correct Answers: ${result?.correct_answers || 0}
+Wrong Answers: ${result?.wrong_answers || 0}
+Score: ${result?.marks_obtained || 0}/${result?.total_marks || 0} (${result?.percentage || 0}%)
+Grade: ${result?.grade || 'N/A'}
+
+Incorrectly Answered Questions:
+${questions.map((q, idx) => {
+  const answer = answers?.find(a => String(a.question_id) === String(q.id || idx + 1));
+  if (answer && !answer.is_correct) {
+    return `- Question ${idx + 1}: ${q.prompt}\n  Student's Answer: ${answer.selected_options?.join(', ') || answer.text_answer || 'Not answered'}`;
+  }
+  return null;
+}).filter(Boolean).join('\n')}
+
+Please provide a comprehensive review focusing on:
+1. Overall performance analysis
+2. Detailed explanation of concepts from incorrectly answered questions
+3. Study recommendations based on the exam material
+4. Encouragement and next steps
+`;
+
+  try {
+    const response = await fetch(`${ragApiUrl}/query`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        question: performanceSummary,
+        session_id: result?.session_id || 'review'
+      }),
+      signal: AbortSignal.timeout(30000) // 30 second timeout
+    });
+
+    if (!response.ok) {
+      throw new Error(`RAG API returned ${response.status}: ${await response.text()}`);
+    }
+
+    const data = await response.json();
+    
+    return {
+      text: data.answer,
+      sources: data.sources
+    };
+  } catch (error: any) {
+    console.error('RAG system error:', error);
+    throw new Error(`RAG system unavailable: ${error.message}`);
+  }
 }
 
 async function getGeminiReview(prompt: string): Promise<{ text: string; tokens: number }> {
