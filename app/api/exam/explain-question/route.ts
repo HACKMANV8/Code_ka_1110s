@@ -180,8 +180,10 @@ async function getAzureOpenAIExplanation(prompt: string): Promise<{ text: string
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
 
+  // If Azure credentials are not available, fall back to Gemini
   if (!apiKey || !endpoint) {
-    throw new Error('Azure OpenAI credentials not configured');
+    console.log('Azure OpenAI not configured, using Gemini instead');
+    return getGeminiExplanation(prompt);
   }
 
   const response = await fetch(endpoint, {
@@ -219,4 +221,76 @@ async function getAzureOpenAIExplanation(prompt: string): Promise<{ text: string
     text: data.choices[0].message.content,
     tokens: data.usage?.total_tokens || 0,
   };
+}
+
+async function getGeminiExplanation(prompt: string): Promise<{ text: string; tokens: number }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('Gemini API key not configured. Please set GEMINI_API_KEY environment variable.');
+  }
+
+  // Use v1 endpoint with latest model (v1beta is deprecated)
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 800,
+          temperature: 0.7,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+      });
+      
+      if (response.status === 401) {
+        throw new Error('Gemini API authentication failed. Check your API key.');
+      } else if (response.status === 429) {
+        throw new Error('Gemini API rate limit exceeded. Please try again later.');
+      } else {
+        throw new Error(`Gemini API failed: ${response.status} ${response.statusText}`);
+      }
+    }
+
+    const data = await response.json();
+    
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.error('Unexpected Gemini API response format:', data);
+      throw new Error('Invalid response from Gemini API');
+    }
+    
+    const textContent = data.candidates[0].content.parts[0]?.text || 'No explanation generated';
+    const tokens = data.usageMetadata?.totalTokenCount || 0;
+    
+    return {
+      text: textContent,
+      tokens: tokens,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`Gemini API request failed: ${String(error)}`);
+  }
 }

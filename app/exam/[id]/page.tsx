@@ -888,15 +888,22 @@ export default function ExamPage() {
 
     const answer = {
       session_id: sessionId,
-      question_id: String(questionId),
+      question_id: questionId,  // Keep type as-is (number or string matching exam questions)
       selected_options: [selectedOption],
       answered_at: new Date().toISOString(),
     };
 
     try {
-      await supabase
+      // Upsert will update if exists (due to UNIQUE constraint), insert if new
+      const { data, error } = await supabase
         .from('student_answers')
-        .upsert(answer, { onConflict: 'session_id,question_id' });
+        .upsert([answer]);
+      
+      if (error) {
+        console.error('Error upserting MCQ answer:', { error, answer });
+      } else {
+        console.log('MCQ answer upserted successfully');
+      }
 
       setStudentAnswers((prev) => {
         const newMap = new Map(prev);
@@ -916,15 +923,22 @@ export default function ExamPage() {
 
     const answer = {
       session_id: sessionId,
-      question_id: String(questionId),
+      question_id: questionId,  // Keep type as-is (number or string matching exam questions)
       text_answer: text,
       answered_at: new Date().toISOString(),
     };
 
     try {
-      await supabase
+      // Upsert will update if exists (due to UNIQUE constraint), insert if new
+      const { data, error } = await supabase
         .from('student_answers')
-        .upsert(answer, { onConflict: 'session_id,question_id' });
+        .upsert([answer]);
+      
+      if (error) {
+        console.error('Error upserting text answer:', { error, answer });
+      } else {
+        console.log('Text answer upserted successfully');
+      }
 
       setStudentAnswers((prev) => {
         const newMap = new Map(prev);

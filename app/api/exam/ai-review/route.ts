@@ -98,11 +98,11 @@ export async function POST(request: NextRequest) {
       result
     );
 
-    // Call Azure OpenAI
-    const review = await getAzureOpenAIReview(prompt);
+    // Call Gemini AI
+    const review = await getGeminiReview(prompt);
 
-    // Save to review history
-    await supabase
+    // Save to review history (don't block if this fails)
+    supabase
       .from('exam_review_history')
       .insert({
         session_id,
@@ -111,6 +111,11 @@ export async function POST(request: NextRequest) {
         requested_ai_explanation: true,
         ai_explanation_text: review.text,
         ai_explanation_tokens: review.tokens,
+      })
+      .then(({ error }) => {
+        if (error) {
+          console.error('Failed to save review history:', error);
+        }
       });
 
     return NextResponse.json({
@@ -129,8 +134,11 @@ export async function POST(request: NextRequest) {
 
   } catch (error) {
     console.error('AI Review API error:', error);
+    
+    const errorMessage = error instanceof Error ? error.message : 'Failed to generate AI review';
+    
     return NextResponse.json(
-      { error: 'Failed to generate AI review' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
@@ -209,49 +217,153 @@ Format your response in clear sections with markdown formatting.`;
   return prompt;
 }
 
+async function getGeminiReview(prompt: string): Promise<{ text: string; tokens: number }> {
+  const apiKey = process.env.GEMINI_API_KEY;
+
+  if (!apiKey) {
+    console.error('Missing Gemini API key');
+    throw new Error('Gemini API key not configured. Please set GEMINI_API_KEY environment variable.');
+  }
+
+  // Use v1 endpoint with latest model (v1beta is deprecated)
+  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [
+              {
+                text: prompt
+              }
+            ]
+          }
+        ],
+        generationConfig: {
+          maxOutputTokens: 2000,
+          temperature: 0.7,
+        }
+      }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Gemini API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+      });
+      
+      if (response.status === 401) {
+        throw new Error('Gemini API authentication failed. Check your API key.');
+      } else if (response.status === 429) {
+        throw new Error('Gemini API rate limit exceeded. Please try again later.');
+      } else {
+        throw new Error(`Gemini API failed: ${response.status} ${response.statusText}`);
+      }
+    }
+
+    const data = await response.json();
+    
+    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
+      console.error('Unexpected Gemini API response format:', data);
+      throw new Error('Invalid response from Gemini API');
+    }
+    
+    const textContent = data.candidates[0].content.parts[0]?.text || 'No review generated';
+    const tokens = data.usageMetadata?.totalTokenCount || 0;
+    
+    return {
+      text: textContent,
+      tokens: tokens,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`Gemini API request failed: ${String(error)}`);
+  }
+}
+
 async function getAzureOpenAIReview(prompt: string): Promise<{ text: string; tokens: number }> {
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
   const deploymentName = process.env.AZURE_OPENAI_DEPLOYMENT_NAME || 'gpt-4';
 
   if (!apiKey || !endpoint) {
-    throw new Error('Azure OpenAI credentials not configured');
+    console.error('Missing Azure OpenAI credentials', {
+      hasKey: !!apiKey,
+      hasEndpoint: !!endpoint,
+      deploymentName
+    });
+    throw new Error('Azure OpenAI credentials not configured. Please set AZURE_OPENAI_API_KEY and AZURE_OPENAI_ENDPOINT environment variables.');
   }
 
-  const url = `${endpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`;
+  // Ensure endpoint doesn't have trailing slash
+  const cleanEndpoint = endpoint.endsWith('/') ? endpoint.slice(0, -1) : endpoint;
+  const url = `${cleanEndpoint}/openai/deployments/${deploymentName}/chat/completions?api-version=2024-02-15-preview`;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
-    body: JSON.stringify({
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert educator providing comprehensive, encouraging, and insightful exam reviews to help students learn and improve.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 2000,
-      temperature: 0.7,
-    }),
-  });
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'api-key': apiKey,
+      },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: 'system',
+            content: 'You are an expert educator providing comprehensive, encouraging, and insightful exam reviews to help students learn and improve.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
+        ],
+        max_tokens: 2000,
+        temperature: 0.7,
+      }),
+    });
 
-  if (!response.ok) {
-    const errorText = await response.text();
-    console.error('Azure OpenAI API error:', errorText);
-    throw new Error(`Azure OpenAI API failed: ${response.status}`);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Azure OpenAI API error:', {
+        status: response.status,
+        statusText: response.statusText,
+        error: errorText,
+        url: url.replace(apiKey, '***'),
+      });
+      
+      if (response.status === 401) {
+        throw new Error('Azure OpenAI API authentication failed. Check your API key.');
+      } else if (response.status === 404) {
+        throw new Error('Azure OpenAI deployment not found. Check your endpoint and deployment name.');
+      } else {
+        throw new Error(`Azure OpenAI API failed: ${response.status} ${response.statusText}`);
+      }
+    }
+
+    const data = await response.json();
+    
+    if (!data.choices || !data.choices[0]) {
+      console.error('Unexpected Azure OpenAI response format:', data);
+      throw new Error('Invalid response from Azure OpenAI API');
+    }
+    
+    return {
+      text: data.choices[0].message?.content || 'No review generated',
+      tokens: data.usage?.total_tokens || 0,
+    };
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error;
+    }
+    throw new Error(`Azure OpenAI API request failed: ${String(error)}`);
   }
-
-  const data = await response.json();
-  
-  return {
-    text: data.choices[0]?.message?.content || 'No review generated',
-    tokens: data.usage?.total_tokens || 0,
-  };
 }

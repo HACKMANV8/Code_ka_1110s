@@ -77,36 +77,60 @@ export async function POST(request: NextRequest) {
         // Check if answer is correct based on question type
         let isCorrect = false;
         
-        if (question.type === 'mcq' && question.options && answer.selected_options) {
-          const correctOptions = question.options
-            .filter((opt: any) => opt.isCorrect)
-            .map((opt: any) => opt.text);
-          
-          isCorrect = answer.selected_options.length === correctOptions.length &&
-            answer.selected_options.every((selected: string) => correctOptions.includes(selected));
-        } else if (question.type === 'true_false' && question.options && answer.selected_options) {
-          const correctOption = question.options.find((opt: any) => opt.isCorrect);
-          isCorrect = answer.selected_options.length === 1 && 
-            answer.selected_options[0] === correctOption?.text;
+        if (question.type === 'mcq') {
+          // MCQ: Compare with correct option(s)
+          if (question.options && answer.selected_options && answer.selected_options.length > 0) {
+            const correctOptions = question.options
+              .filter((opt: any) => opt && opt.isCorrect === true)
+              .map((opt: any) => opt.text);
+            
+            // Check if student selected exactly the correct option(s)
+            const selectedOptions = answer.selected_options.filter((opt: any) => opt);
+            
+            if (selectedOptions.length === correctOptions.length) {
+              isCorrect = selectedOptions.every((selected: string) => 
+                correctOptions.includes(selected)
+              );
+            }
+          }
+        } else if (question.type === 'true_false') {
+          // True/False: Compare exact match
+          if (question.options && answer.selected_options && answer.selected_options.length === 1) {
+            const correctOption = question.options.find((opt: any) => opt && opt.isCorrect === true);
+            isCorrect = correctOption && answer.selected_options[0] === correctOption.text;
+          }
+        } else if (question.type === 'text') {
+          // Text questions: Mark as answered (not auto-graded)
+          if (answer.text_answer && answer.text_answer.trim().length > 0) {
+            isCorrect = true; // Assume correct since text needs manual review
+          }
         }
         
+        // Update answer record with correct status
+        const updateData = {
+          is_correct: isCorrect,
+          marks_obtained: isCorrect ? marks : 0
+        };
+        
+        // Fire and forget - don't block submission
+        supabase
+          .from('student_answers')
+          .update(updateData)
+          .eq('id', answer.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('Error updating answer:', error);
+            }
+          });
+        
+        // Update local counters
         if (isCorrect) {
           correctAnswers++;
           marksObtained += marks;
-          
-          // Update answer record with correct status
-          supabase
-            .from('student_answers')
-            .update({ is_correct: true, marks_obtained: marks })
-            .eq('id', answer.id)
-            .then();
-        } else {
-          supabase
-            .from('student_answers')
-            .update({ is_correct: false, marks_obtained: 0 })
-            .eq('id', answer.id)
-            .then();
         }
+      } else {
+        // Question not answered: mark as incorrect with 0 marks
+        // This is handled by not incrementing correctAnswers
       }
     });
 
@@ -158,22 +182,31 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    const finalCheatScore = totalWeight > 0 ? totalScore / totalWeight : 100;
-    const focusScore = Math.round(finalCheatScore);
+    // IMPORTANT: cheat_scores table contains CHEAT_SCORE (0-100, where 0=good, 100=bad)
+    // But exam_results.focus_score should be inverted (0=bad, 100=good)
+    // So: focus_score = 100 - cheat_score
+    const cheatScore = totalWeight > 0 ? totalScore / totalWeight : 0;
+    const focusScore = Math.round(100 - cheatScore);
     
-    // Determine proctoring status
+    // If no scores were recorded during exam, assume clean exam (100 focus)
+    const finalFocusScore = scores && scores.length > 0 ? focusScore : 100;
+    
+    // Determine proctoring status (updated thresholds)
     let proctoringStatus: 'clean' | 'suspicious' | 'flagged' = 'clean';
-    if (focusScore < 60) {
+    if (finalFocusScore < 45) {
+      // Flagged: score < 45 (critical suspicious activity)
       proctoringStatus = 'flagged';
-    } else if (focusScore < 80) {
+    } else if (finalFocusScore < 70) {
+      // Suspicious: score 45-69 (moderate suspicious activity)
       proctoringStatus = 'suspicious';
     }
+    // Clean: score >= 70 (normal behavior)
 
     // Update exam session
     const { error: updateError } = await supabase
       .from('exam_sessions')
       .update({
-        final_cheat_score: focusScore,
+        final_cheat_score: finalFocusScore,
         status: proctoringStatus === 'flagged' ? 'flagged' : 'submitted',
         submitted_at: new Date().toISOString(),
       })
@@ -181,40 +214,68 @@ export async function POST(request: NextRequest) {
 
     if (updateError) {
       console.error('Error updating session:', updateError);
+      return NextResponse.json(
+        { error: 'Failed to update session' },
+        { status: 500 }
+      );
     }
 
-    // Create or update exam result
-    const { error: resultError } = await supabase
+    // Create exam result (insert only, don't use upsert)
+    // NOTE: 'percentage' is a GENERATED ALWAYS column, so do not include it in insert/update
+    const resultData = {
+      session_id: session_id,
+      student_id: session.student_id,
+      exam_id: session.exam_id,
+      total_questions: totalQuestions,
+      attempted_questions: attemptedQuestions,
+      correct_answers: correctAnswers,
+      wrong_answers: wrongAnswers,
+      total_marks: totalMarks,
+      marks_obtained: marksObtained,
+      // percentage is auto-calculated: GENERATED ALWAYS AS (marks_obtained / total_marks * 100)
+      grade: grade,
+      pass_status: passStatus,
+      cheat_score: Math.round(cheatScore),  // Store original cheat score (0-100, 0=good, 100=bad)
+      focus_score: finalFocusScore,  // Store inverted focus score (0-100, 100=good)
+      proctoring_status: proctoringStatus,
+      submitted_at: new Date().toISOString(),
+    };
+
+    // Try to insert, if it exists update it
+    const { data: existingResult } = await supabase
       .from('exam_results')
-      .upsert({
-        session_id: session_id,
-        student_id: session.student_id,
-        exam_id: session.exam_id,
-        total_questions: totalQuestions,
-        attempted_questions: attemptedQuestions,
-        correct_answers: correctAnswers,
-        wrong_answers: wrongAnswers,
-        total_marks: totalMarks,
-        marks_obtained: marksObtained,
-        percentage: percentage,
-        grade: grade,
-        pass_status: passStatus,
-        cheat_score: 100 - focusScore, // Invert for cheat score
-        focus_score: focusScore,
-        proctoring_status: proctoringStatus,
-        submitted_at: new Date().toISOString(),
-      }, {
-        onConflict: 'session_id'
-      });
+      .select('id')
+      .eq('session_id', session_id)
+      .single();
+
+    let resultError = null;
+    if (existingResult) {
+      // Update existing
+      const { error: updateResultError } = await supabase
+        .from('exam_results')
+        .update(resultData)
+        .eq('session_id', session_id);
+      resultError = updateResultError;
+    } else {
+      // Insert new
+      const { error: insertResultError } = await supabase
+        .from('exam_results')
+        .insert(resultData);
+      resultError = insertResultError;
+    }
 
     if (resultError) {
-      console.error('Error creating result:', resultError);
+      console.error('Error saving exam results:', resultError);
+      return NextResponse.json(
+        { error: 'Failed to save exam results: ' + resultError.message },
+        { status: 500 }
+      );
     }
 
     return NextResponse.json({
       success: true,
-      final_cheat_score: focusScore,
-      focus_score: focusScore,
+      final_cheat_score: finalFocusScore,  // This is the focus score to display
+      focus_score: finalFocusScore,
       status: proctoringStatus === 'flagged' ? 'flagged' : 'submitted',
       message: 'Exam submitted successfully',
       results: {
