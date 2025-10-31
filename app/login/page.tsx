@@ -62,7 +62,7 @@ export default function LoginPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: ${window.location.origin}/auth/callback,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
 
@@ -85,7 +85,7 @@ export default function LoginPage() {
           <h2 className="text-2xl font-bold text-white mb-2">
             Sign in to your account
           </h2>
-          <p className={text-sm text-white/60}>
+          <p className="text-sm text-white/60">
             Or{' '}
             <Link
               href="/signup"
@@ -98,14 +98,14 @@ export default function LoginPage() {
 
         <form className="space-y-5" onSubmit={handleEmailLogin}>
           {error && (
-            <div className={rounded-lg bg-red-500/10 border-red-500/30 border p-3}>
-              <p className={text-sm text-red-400}>{error}</p>
+            <div className="rounded-lg bg-red-500/10 border-red-500/30 border p-3">
+              <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="email" className={block text-sm font-medium text-white/80 mb-1.5}>
+              <label htmlFor="email" className="block text-sm font-medium text-white/80 mb-1.5">
                 Email address
               </label>
               <input
@@ -116,13 +116,13 @@ export default function LoginPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all}
+                className="block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all"
                 placeholder="Enter your email"
               />
             </div>
 
             <div>
-              <label htmlFor="password" className={block text-sm font-medium text-white/80 mb-1.5}>
+              <label htmlFor="password" className="block text-sm font-medium text-white/80 mb-1.5">
                 Password
               </label>
               <input
@@ -133,7 +133,7 @@ export default function LoginPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all}
+                className="block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all"
                 placeholder="Enter your password"
               />
             </div>
@@ -151,10 +151,10 @@ export default function LoginPage() {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className={w-full border-t border-white/10}></div>
+              <div className="w-full border-t border-white/10"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className={px-2 bg-[#19191C] text-white/60}>Or continue with</span>
+              <span className="px-2 bg-[#19191C] text-white/60">Or continue with</span>
             </div>
           </div>
 
@@ -163,7 +163,7 @@ export default function LoginPage() {
               type="button"
               onClick={handleGoogleLogin}
               disabled={loading}
-              className={w-full flex items-center justify-center gap-3 py-3 px-4 border border-white/10 bg-white/5 text-white hover:bg-white/10 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FD366E] disabled:opacity-50 disabled:cursor-not-allowed transition-all}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 border border-white/10 bg-white/5 text-white hover:bg-white/10 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#FD366E] disabled:opacity-50 disabled:cursor-not-allowed transition-all"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
