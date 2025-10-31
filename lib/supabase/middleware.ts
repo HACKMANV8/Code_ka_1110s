@@ -33,13 +33,24 @@ export async function updateSession(request: NextRequest) {
   // Get user role from profiles table
   let userRole = 'student'
   if (user) {
-    const { data: profile } = await supabase
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single()
-    
-    userRole = profile?.role || 'student'
+    try {
+      const { data: profile, error } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+      
+      if (error) {
+        console.warn('Profile lookup failed:', error.message)
+        // If profiles table doesn't exist or user not found, default to student
+        userRole = 'student'
+      } else {
+        userRole = profile?.role || 'student'
+      }
+    } catch (err) {
+      console.warn('Profile lookup error:', err)
+      userRole = 'student'
+    }
   }
 
   // Protect admin routes

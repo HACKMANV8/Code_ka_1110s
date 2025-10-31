@@ -27,7 +27,14 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true)
   const [exams, setExams] = useState<Exam[]>([])
   const [completedExams, setCompletedExams] = useState<any[]>([])
-  const [activeTab, setActiveTab] = useState<'available' | 'completed'>('available')
+  const [activeTab, setActiveTab] = useState<'exams' | 'analysis'>('exams')
+  const [examResults, setExamResults] = useState<any[]>([])
+  const [analytics, setAnalytics] = useState<any>({
+    totalExams: 0,
+    averageScore: 0,
+    totalTime: 0,
+    flaggedSessions: 0
+  })
   
   const router = useRouter()
   const supabase = createClient()
@@ -38,10 +45,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (user) {
-      if (activeTab === 'available') {
+      if (activeTab === 'exams') {
         fetchExams()
-      } else {
-        fetchCompletedExams()
+      } else if (activeTab === 'analysis') {
+        fetchAnalytics()
       }
     }
   }, [user, activeTab])
@@ -133,6 +140,68 @@ export default function DashboardPage() {
     setCompletedExams(data || [])
   }
 
+  const fetchAnalytics = async () => {
+    if (!user) return
+
+    try {
+      // Fetch exam sessions for analytics
+      const { data: sessions, error } = await supabase
+        .from('exam_sessions')
+        .select(`
+          id,
+          final_cheat_score,
+          status,
+          submitted_at,
+          started_at,
+          exam_id,
+          exams (
+            id,
+            name,
+            duration_minutes
+          )
+        `)
+        .eq('student_id', user.id)
+        .not('submitted_at', 'is', null)
+        .order('submitted_at', { ascending: false })
+
+      if (error) {
+        console.error('Error fetching analytics:', error)
+        return
+      }
+
+      const examSessions = sessions || []
+      
+      // Calculate analytics
+      const totalExams = examSessions.length
+      const averageScore = totalExams > 0 
+        ? examSessions.reduce((sum, session) => sum + (100 - (session.final_cheat_score || 0)), 0) / totalExams
+        : 0
+      
+      const flaggedSessions = examSessions.filter(session => session.status === 'flagged').length
+      
+      // Calculate total time spent
+      const totalTime = examSessions.reduce((sum, session) => {
+        if (session.started_at && session.submitted_at) {
+          const startTime = new Date(session.started_at).getTime()
+          const endTime = new Date(session.submitted_at).getTime()
+          return sum + Math.round((endTime - startTime) / (1000 * 60)) // minutes
+        }
+        return sum
+      }, 0)
+
+      setAnalytics({
+        totalExams,
+        averageScore: Math.round(averageScore),
+        totalTime,
+        flaggedSessions
+      })
+
+      setExamResults(examSessions)
+    } catch (error) {
+      console.error('Error fetching analytics:', error)
+    }
+  }
+
   const handleSignOut = async () => {
     await supabase.auth.signOut()
     router.push('/login')
@@ -199,29 +268,39 @@ export default function DashboardPage() {
         {/* Welcome Section */}
         <div className="mb-8">
           <h2 className={`text-3xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>Welcome, {user?.user_metadata?.full_name || 'Student'}!</h2>
-          <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>View and take your scheduled exams</p>
+          <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Take scheduled exams and view your performance analytics</p>
         </div>
 
         {/* Tabs */}
         <div className={`mb-6 border-b ${isDark ? 'border-slate-700' : 'border-gray-300'}`}>
           <nav className="flex gap-8">
             <button
-              onClick={() => setActiveTab('available')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'available' ? `border-blue-600 ${isDark ? 'text-blue-400' : 'text-blue-600'}` : isDark ? 'border-transparent text-gray-400 hover:text-gray-300' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setActiveTab('exams')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'exams' ? `border-blue-600 ${isDark ? 'text-blue-400' : 'text-blue-600'}` : isDark ? 'border-transparent text-gray-400 hover:text-gray-300' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              Available Exams
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                Available Exams
+              </div>
             </button>
             <button
-              onClick={() => setActiveTab('completed')}
-              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'completed' ? `border-blue-600 ${isDark ? 'text-blue-400' : 'text-blue-600'}` : isDark ? 'border-transparent text-gray-400 hover:text-gray-300' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
+              onClick={() => setActiveTab('analysis')}
+              className={`py-4 px-1 border-b-2 font-medium text-sm transition-colors ${activeTab === 'analysis' ? `border-blue-600 ${isDark ? 'text-blue-400' : 'text-blue-600'}` : isDark ? 'border-transparent text-gray-400 hover:text-gray-300' : 'border-transparent text-gray-500 hover:text-gray-700'}`}
             >
-              Completed Exams
+              <div className="flex items-center gap-2">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Analysis Dashboard
+              </div>
             </button>
           </nav>
         </div>
 
-        {/* Exams List */}
-        {activeTab === 'available' && (
+        {/* Content */}
+        {activeTab === 'exams' && (
           <div className="space-y-4">
             {exams.length === 0 ? (
               <div className={`border rounded-lg shadow p-12 text-center ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
@@ -289,82 +368,126 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {activeTab === 'completed' && (
-          <div className="space-y-4">
-            {completedExams.length === 0 ? (
-              <div className={`border rounded-lg shadow p-12 text-center ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-gray-50 border-gray-200'}`}>
-                <svg className={`w-16 h-16 mx-auto mb-4 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-                <h3 className={`text-lg font-medium mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>No Completed Exams</h3>
-                <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>Your completed exams will appear here</p>
-              </div>
-            ) : (
-              completedExams.map((session: any) => (
-                <div
-                  key={session.id}
-                  className={`border rounded-lg shadow hover:shadow-lg transition-all p-6 ${isDark ? 'bg-slate-800/30 border-slate-700 hover:border-blue-500/50' : 'bg-white border-gray-200 hover:border-blue-400'}`}
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-3 mb-2">
-                        <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{session.exams?.name || 'Exam'}</h3>
-                        {session.status === 'flagged' ? (
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 border ${isDark ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-red-100 text-red-700 border-red-300'}`}>
-                            <span>⚠️</span>
-                            FLAGGED
-                          </span>
-                        ) : (
-                          <span className={`px-2 py-1 text-xs font-semibold rounded-full flex items-center gap-1 border ${isDark ? 'bg-green-500/20 text-green-400 border-green-500/30' : 'bg-green-100 text-green-700 border-green-300'}`}>
-                            <span>✓</span>
-                            SUBMITTED
-                          </span>
-                        )}
-                      </div>
-                      {session.exams?.description && (
-                        <p className={isDark ? 'text-gray-400 mb-4' : 'text-gray-600 mb-4'}>{session.exams.description}</p>
-                      )}
-                      <div className="grid grid-cols-3 gap-4 mt-4">
-                        <div>
-                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Submitted</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{formatDate(session.submitted_at)}</p>
-                        </div>
-                        <div>
-                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Cheat Score</p>
-                          <p className={`text-sm font-medium ${
-                            session.final_cheat_score >= 30 
-                              ? 'text-red-400' 
-                              : session.final_cheat_score >= 15 
-                              ? 'text-yellow-400' 
-                              : 'text-green-400'
-                          }`}>
-                            {session.final_cheat_score}%
-                          </p>
-                        </div>
-                        <div>
-                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Duration</p>
-                          <p className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{session.exams?.duration_minutes || 'N/A'} min</p>
-                        </div>
-                      </div>
-                    </div>
-                    <div className="ml-6 flex gap-3">
-                      <button 
-                        onClick={() => router.push(`/exam/review/${session.id}`)}
-                        className={`px-6 py-3 rounded-lg transition-all font-medium border ${isDark ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 text-pink-300 border-pink-500/30 hover:from-pink-500/30 hover:to-purple-500/30' : 'bg-pink-100 text-pink-700 border-pink-300 hover:bg-pink-200'}`}
-                      >
-                        ✨ Review Exam
-                      </button>
-                      <button 
-                        onClick={() => router.push(`/exam/${session.exams?.id}/results?score=${session.final_cheat_score}&status=${session.status}&sessionId=${session.session_id}`)}
-                        className={`px-6 py-3 rounded-lg transition-all font-medium border ${isDark ? 'bg-slate-700/50 text-white border-slate-600 hover:bg-slate-700' : 'bg-gray-100 text-gray-900 border-gray-300 hover:bg-gray-200'}`}
-                      >
-                        View Results
-                      </button>
-                    </div>
+        {activeTab === 'analysis' && (
+          <div className="space-y-6">
+            {/* Analytics Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className={`rounded-lg p-6 border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-full ${isDark ? 'bg-blue-500/20' : 'bg-blue-100'}`}>
+                    <svg className={`w-6 h-6 ${isDark ? 'text-blue-400' : 'text-blue-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Exams</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{analytics.totalExams}</p>
                   </div>
                 </div>
-              ))
-            )}
+              </div>
+
+              <div className={`rounded-lg p-6 border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-full ${isDark ? 'bg-green-500/20' : 'bg-green-100'}`}>
+                    <svg className={`w-6 h-6 ${isDark ? 'text-green-400' : 'text-green-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Average Score</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{analytics.averageScore}%</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`rounded-lg p-6 border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-full ${isDark ? 'bg-purple-500/20' : 'bg-purple-100'}`}>
+                    <svg className={`w-6 h-6 ${isDark ? 'text-purple-400' : 'text-purple-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Total Time</p>
+                    <p className={`text-2xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>{analytics.totalTime}m</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className={`rounded-lg p-6 border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-white border-gray-200'}`}>
+                <div className="flex items-center">
+                  <div className={`p-2 rounded-full ${analytics.flaggedSessions > 0 ? isDark ? 'bg-red-500/20' : 'bg-red-100' : isDark ? 'bg-gray-500/20' : 'bg-gray-100'}`}>
+                    <svg className={`w-6 h-6 ${analytics.flaggedSessions > 0 ? isDark ? 'text-red-400' : 'text-red-600' : isDark ? 'text-gray-400' : 'text-gray-600'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L3.732 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  </div>
+                  <div className="ml-4">
+                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Flagged</p>
+                    <p className={`text-2xl font-bold ${analytics.flaggedSessions > 0 ? isDark ? 'text-red-400' : 'text-red-600' : isDark ? 'text-white' : 'text-gray-900'}`}>{analytics.flaggedSessions}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Exam History */}
+            <div className={`rounded-lg p-6 border ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-white border-gray-200'}`}>
+              <h3 className={`text-lg font-semibold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>Recent Exam History</h3>
+              
+              {examResults.length === 0 ? (
+                <div className="text-center py-8">
+                  <svg className={`w-12 h-12 mx-auto mb-4 ${isDark ? 'text-gray-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                  </svg>
+                  <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>No exam data available yet</p>
+                  <p className={`text-sm ${isDark ? 'text-gray-500' : 'text-gray-500'}`}>Complete some exams to see your performance analytics</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {examResults.slice(0, 5).map((session: any) => (
+                    <div
+                      key={session.id}
+                      className={`flex items-center justify-between p-4 rounded-lg border ${isDark ? 'bg-slate-700/30 border-slate-600' : 'bg-gray-50 border-gray-200'}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className={`w-3 h-3 rounded-full ${
+                          session.status === 'flagged' 
+                            ? 'bg-red-500' 
+                            : session.final_cheat_score >= 30
+                            ? 'bg-orange-500'
+                            : 'bg-green-500'
+                        }`}></div>
+                        <div>
+                          <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>{session.exams?.name || 'Unknown Exam'}</p>
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                            {formatDate(session.submitted_at)}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Focus Score</p>
+                          <p className={`font-semibold ${
+                            session.final_cheat_score <= 10 
+                              ? 'text-green-500' 
+                              : session.final_cheat_score <= 25 
+                              ? 'text-yellow-500' 
+                              : 'text-red-500'
+                          }`}>
+                            {100 - session.final_cheat_score}%
+                          </p>
+                        </div>
+                        <button 
+                          onClick={() => router.push(`/exam/${session.exams?.id}/results?score=${session.final_cheat_score}&status=${session.status}&sessionId=${session.session_id}`)}
+                          className={`px-3 py-1 text-sm rounded-md transition-colors ${isDark ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                        >
+                          View Details
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         )}
       </main>

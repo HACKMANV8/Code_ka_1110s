@@ -150,14 +150,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const { data: profile } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single()
 
+    if (profileError) {
+      console.error('Profile lookup error:', profileError)
+      return NextResponse.json({ 
+        error: 'Unable to verify user permissions. Please ensure your account is properly set up.' 
+      }, { status: 403 })
+    }
+
     if (profile?.role !== 'admin') {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+      return NextResponse.json({ 
+        error: 'Access denied. Admin privileges required to create exams.' 
+      }, { status: 403 })
     }
 
     const payload = (await request.json()) as ExamPayload
