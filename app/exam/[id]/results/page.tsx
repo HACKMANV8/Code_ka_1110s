@@ -7,6 +7,20 @@ import Link from 'next/link';
 
 export const dynamic = 'force-dynamic'
 
+interface ExamResult {
+  total_questions: number;
+  attempted_questions: number;
+  correct_answers: number;
+  wrong_answers: number;
+  total_marks: number;
+  marks_obtained: number;
+  percentage: number;
+  grade: string;
+  pass_status: boolean;
+  focus_score: number;
+  proctoring_status: string;
+}
+
 export default function ExamResultsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -14,7 +28,8 @@ export default function ExamResultsPage() {
   const examId = params.id as string;
   
   const [examTitle, setExamTitle] = useState('');
-  const [finalScore, setFinalScore] = useState(0);
+  const [examResult, setExamResult] = useState<ExamResult | null>(null);
+  const [focusScore, setFocusScore] = useState(0);
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState('');
@@ -24,15 +39,15 @@ export default function ExamResultsPage() {
   useEffect(() => {
     const loadResults = async () => {
       try {
-        const scoreParam = searchParams.get('score');
-        const statusParam = searchParams.get('status');
         const sessionIdParam = searchParams.get('sessionId');
-
-        if (scoreParam && statusParam) {
-          setFinalScore(parseInt(scoreParam));
-          setStatus(statusParam);
-          if (sessionIdParam) setSessionId(sessionIdParam);
+        
+        if (!sessionIdParam || sessionIdParam === 'undefined') {
+          console.error('Invalid session ID');
+          setLoading(false);
+          return;
         }
+
+        setSessionId(sessionIdParam);
 
         // Fetch exam details
         const { data: exam } = await supabase
@@ -45,6 +60,29 @@ export default function ExamResultsPage() {
           setExamTitle(exam.name);
         }
 
+        // Fetch exam results from database
+        const { data: result, error: resultError } = await supabase
+          .from('exam_results')
+          .select('*')
+          .eq('session_id', sessionIdParam)
+          .single();
+
+        if (resultError) {
+          console.error('Error fetching results:', resultError);
+        }
+
+        if (result) {
+          setExamResult(result);
+          setFocusScore(result.focus_score || 0);
+          setStatus(result.proctoring_status || 'submitted');
+        } else {
+          // Fallback to URL params if no result in DB yet
+          const scoreParam = searchParams.get('score');
+          const statusParam = searchParams.get('status');
+          if (scoreParam) setFocusScore(parseInt(scoreParam));
+          if (statusParam) setStatus(statusParam);
+        }
+
         setLoading(false);
       } catch (error) {
         console.error('Error loading results:', error);
@@ -55,10 +93,10 @@ export default function ExamResultsPage() {
     loadResults();
   }, [examId, searchParams, supabase]);
 
-  const getScoreColor = () => {
-    if (finalScore >= 85) return 'text-green-400';
-    if (finalScore >= 70) return 'text-yellow-400';
-    if (finalScore >= 50) return 'text-orange-400';
+  const getScoreColor = (score: number) => {
+    if (score >= 85) return 'text-green-400';
+    if (score >= 70) return 'text-yellow-400';
+    if (score >= 50) return 'text-orange-400';
     return 'text-red-400';
   };
 
@@ -78,21 +116,21 @@ export default function ExamResultsPage() {
   };
 
   const getPerformanceMessage = () => {
-    if (finalScore >= 90) {
+    if (focusScore >= 90) {
       return {
         title: "Excellent Performance! 🎉",
         message: "Your focus and attention during the exam were outstanding. Keep up the great work!",
         icon: "🏆"
       };
     }
-    if (finalScore >= 75) {
+    if (focusScore >= 75) {
       return {
         title: "Good Performance 👍",
         message: "You maintained good focus throughout most of the exam. Well done!",
         icon: "✨"
       };
     }
-    if (finalScore >= 60) {
+    if (focusScore >= 60) {
       return {
         title: "Fair Performance",
         message: "Some distractions were detected during the exam. Try to maintain better focus next time.",
@@ -109,7 +147,10 @@ export default function ExamResultsPage() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-[#19191C]">
-        <div className="text-white/60">Loading results...</div>
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-[#FD366E]/30 border-t-[#FD366E] rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-white/60">Loading results...</p>
+        </div>
       </div>
     );
   }
@@ -133,25 +174,70 @@ export default function ExamResultsPage() {
           {getStatusBadge()}
         </div>
 
-        {/* Score Card */}
+        {/* Results Summary Grid */}
+        {examResult && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Score</p>
+              <p className={`text-2xl font-bold ${getScoreColor(examResult.percentage)}`}>
+                {examResult.percentage}%
+              </p>
+              <p className="text-white/40 text-xs mt-1">
+                {examResult.marks_obtained}/{examResult.total_marks} marks
+              </p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Grade</p>
+              <p className="text-2xl font-bold text-[#FD366E]">
+                {examResult.grade}
+              </p>
+              <p className="text-white/40 text-xs mt-1">
+                {examResult.pass_status ? 'Passed ✓' : 'Failed'}
+              </p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Correct</p>
+              <p className="text-2xl font-bold text-green-400">
+                {examResult.correct_answers}
+              </p>
+              <p className="text-white/40 text-xs mt-1">
+                of {examResult.total_questions}
+              </p>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-4">
+              <p className="text-white/60 text-xs uppercase tracking-wider mb-1">Focus</p>
+              <p className={`text-2xl font-bold ${getScoreColor(focusScore)}`}>
+                {focusScore}%
+              </p>
+              <p className="text-white/40 text-xs mt-1">
+                {examResult.proctoring_status}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Focus Score Card */}
         <div className="bg-white/5 border border-white/10 rounded-2xl p-8 mb-6">
           <div className="text-center">
             <p className="text-white/60 text-sm uppercase tracking-wider mb-3">Focus Score</p>
-            <div className={`text-7xl font-bold ${getScoreColor()} mb-4`}>
-              {finalScore}%
+            <div className={`text-7xl font-bold ${getScoreColor(focusScore)} mb-4`}>
+              {focusScore}%
             </div>
             <div className="h-3 bg-white/10 rounded-full overflow-hidden mb-6">
               <div
                 className={`h-full transition-all ${
-                  finalScore >= 85
+                  focusScore >= 85
                     ? 'bg-green-500'
-                    : finalScore >= 70
+                    : focusScore >= 70
                     ? 'bg-yellow-500'
-                    : finalScore >= 50
+                    : focusScore >= 50
                     ? 'bg-orange-500'
                     : 'bg-red-500'
                 }`}
-                style={{ width: `${finalScore}%` }}
+                style={{ width: `${focusScore}%` }}
               />
             </div>
             <h3 className="text-2xl font-bold text-white mb-2">{performance.title}</h3>
@@ -166,11 +252,19 @@ export default function ExamResultsPage() {
               <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
                 <span className="text-xl">📋</span>
               </div>
-              <h3 className="text-white font-semibold">What Happens Next?</h3>
+              <h3 className="text-white font-semibold">Review Your Answers</h3>
             </div>
-            <p className="text-white/70 text-sm leading-relaxed">
-              Your exam has been submitted for review. Results and grades will be posted by your instructor within 24-48 hours.
+            <p className="text-white/70 text-sm leading-relaxed mb-4">
+              View your answers, correct solutions, and get AI-powered explanations for each question.
             </p>
+            {sessionId && sessionId !== 'undefined' && (
+              <Link
+                href={`/exam/review/${sessionId}`}
+                className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] text-white rounded-lg font-medium hover:shadow-lg hover:shadow-pink-500/30 transition-all"
+              >
+                <span>📝</span> Review Answers
+              </Link>
+            )}
           </div>
 
           <div className="bg-white/5 border border-white/10 rounded-xl p-6">

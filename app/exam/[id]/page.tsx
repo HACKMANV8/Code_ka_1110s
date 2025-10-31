@@ -39,6 +39,7 @@ export default function ExamPage() {
   const [questionPaneWidth, setQuestionPaneWidth] = useState(0.65);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
   const [isDark, setIsDark] = useState(true);
+  const [studentAnswers, setStudentAnswers] = useState<Map<number | string, any>>(new Map());
   
   type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
   
@@ -881,6 +882,79 @@ export default function ExamPage() {
     }
   };
 
+  // Save student answer for MCQ questions
+  const handleMCQAnswer = async (questionId: number | string, selectedOption: string) => {
+    if (!sessionId) return;
+
+    const answer = {
+      session_id: sessionId,
+      question_id: String(questionId),
+      selected_options: [selectedOption],
+      answered_at: new Date().toISOString(),
+    };
+
+    try {
+      await supabase
+        .from('student_answers')
+        .upsert(answer, { onConflict: 'session_id,question_id' });
+
+      setStudentAnswers((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(questionId, answer);
+        return newMap;
+      });
+
+      console.log('Answer saved:', questionId, selectedOption);
+    } catch (error) {
+      console.error('Error saving answer:', error);
+    }
+  };
+
+  // Save student answer for text questions
+  const handleTextAnswer = async (questionId: number | string, text: string) => {
+    if (!sessionId || !text.trim()) return;
+
+    const answer = {
+      session_id: sessionId,
+      question_id: String(questionId),
+      text_answer: text,
+      answered_at: new Date().toISOString(),
+    };
+
+    try {
+      await supabase
+        .from('student_answers')
+        .upsert(answer, { onConflict: 'session_id,question_id' });
+
+      setStudentAnswers((prev) => {
+        const newMap = new Map(prev);
+        newMap.set(questionId, answer);
+        return newMap;
+      });
+
+      console.log('Text answer saved:', questionId);
+    } catch (error) {
+      console.error('Error saving text answer:', error);
+    }
+  };
+
+  // Check if question has been answered
+  const isQuestionAnswered = (questionId: number | string) => {
+    return studentAnswers.has(questionId);
+  };
+
+  // Get selected option for MCQ
+  const getSelectedOption = (questionId: number | string) => {
+    const answer = studentAnswers.get(questionId);
+    return answer?.selected_options?.[0] || null;
+  };
+
+  // Get text answer
+  const getTextAnswer = (questionId: number | string) => {
+    const answer = studentAnswers.get(questionId);
+    return answer?.text_answer || '';
+  };
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
@@ -1098,31 +1172,56 @@ export default function ExamPage() {
                               {question.type === 'mcq' ? (
                                 <div className="mt-4 space-y-2">
                                   {question.options && question.options.length > 0 ? (
-                                    question.options.map((option, optionIndex) => (
-                                      <label
-                                        key={optionIndex}
-                                        className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer px-3 py-2"
-                                      >
-                                        <input
-                                          type="radio"
-                                          name={`question-${question.id}`}
-                                          className="h-4 w-4 text-blue-500 focus:ring-blue-500"
-                                          disabled
-                                        />
-                                        <span>{option.text}</span>
-                                      </label>
-                                    ))
+                                    question.options.map((option, optionIndex) => {
+                                      const optionLetter = String.fromCharCode(65 + optionIndex);
+                                      const isSelected = getSelectedOption(question.id) === option.text;
+                                      return (
+                                        <label
+                                          key={optionIndex}
+                                          className={`flex items-center gap-3 ${questionOptionLabelBase} ${
+                                            isSelected ? 'border-blue-500 bg-blue-500/10' : 'hover:bg-white/10'
+                                          } transition-colors cursor-pointer px-3 py-2`}
+                                        >
+                                          <input
+                                            type="radio"
+                                            name={`question-${question.id}`}
+                                            value={option.text}
+                                            checked={isSelected}
+                                            onChange={() => handleMCQAnswer(question.id, option.text)}
+                                            className="h-4 w-4 text-blue-500 focus:ring-blue-500"
+                                            disabled={!isStarted}
+                                          />
+                                          <span className="flex items-center gap-2">
+                                            <span className="font-bold">{optionLetter}.</span>
+                                            <span>{option.text}</span>
+                                          </span>
+                                          {isSelected && (
+                                            <span className="ml-auto text-blue-400 text-sm">✓ Selected</span>
+                                          )}
+                                        </label>
+                                      );
+                                    })
                                   ) : (
-                                    <p className={`text-sm mt-3 italic ${subtleTextClass}`}>
+                                    <p className={`text-sm mt-3 italic ${questionOptionEmptyText}`}>
                                       No answer options have been provided yet.
                                     </p>
                                   )}
                                 </div>
                               ) : (
                                 <textarea
-                                  className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass}`}
+                                  value={getTextAnswer(question.id)}
+                                  onChange={(e) => setStudentAnswers(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(question.id, { text_answer: e.target.value });
+                                    return newMap;
+                                  })}
+                                  onBlur={(e) => handleTextAnswer(question.id, e.target.value)}
+                                  disabled={!isStarted}
+                                  className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass} ${
+                                    !isStarted ? 'opacity-50 cursor-not-allowed' : ''
+                                  }`}
                                   rows={3}
-                                  placeholder="Type your answer here..."
+                                  placeholder={isStarted ? "Type your answer here..." : "Start the exam to answer"}
                                 />
                               )}
                             </div>
@@ -1198,6 +1297,27 @@ export default function ExamPage() {
                   {isStarted ? 'Session active' : 'Session not started'}
                 </span>
               </div>
+              {isStarted && questions.length > 0 && (
+                <div className="bg-white/5 border border-white/10 rounded-lg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className={`text-sm font-medium ${headingTextClass}`}>Progress</span>
+                    <span className="text-sm text-blue-400 font-bold">
+                      {studentAnswers.size} / {questions.length}
+                    </span>
+                  </div>
+                  <div className="h-2 bg-white/10 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-gradient-to-r from-blue-500 to-blue-600 transition-all duration-300"
+                      style={{ width: `${(studentAnswers.size / questions.length) * 100}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-white/60 mt-2">
+                    {studentAnswers.size === questions.length
+                      ? '✅ All questions answered!'
+                      : `${questions.length - studentAnswers.size} question${questions.length - studentAnswers.size !== 1 ? 's' : ''} remaining`}
+                  </p>
+                </div>
+              )}
               <div className="flex gap-3">
                 {!isStarted ? (
                   <button
