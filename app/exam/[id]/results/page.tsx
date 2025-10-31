@@ -77,9 +77,14 @@ export default function ExamResultsPage() {
           setStatus(result.proctoring_status || 'submitted');
         } else {
           // Fallback to URL params if no result in DB yet
+          // Convert cheat score to focus score: focus_score = 100 - cheat_score
           const scoreParam = searchParams.get('score');
           const statusParam = searchParams.get('status');
-          if (scoreParam) setFocusScore(parseInt(scoreParam));
+          if (scoreParam) {
+            const cheatScore = parseInt(scoreParam);
+            const focusScore = 100 - cheatScore;
+            setFocusScore(focusScore);
+          }
           if (statusParam) setStatus(statusParam);
         }
 
