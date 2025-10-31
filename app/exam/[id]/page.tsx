@@ -152,6 +152,29 @@ export default function ExamPage() {
     }
   }, []);
 
+  // Cleanup WebRTC connections on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup WebRTC peer connection
+      if (peerRef.current) {
+        peerRef.current.close();
+        peerRef.current = null;
+      }
+      
+      // Cleanup Supabase realtime channel
+      if (channelRef.current) {
+        channelRef.current.unsubscribe();
+        channelRef.current = null;
+      }
+      
+      // Stop media stream
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach(track => track.stop());
+        streamRef.current = null;
+      }
+    };
+  }, []);
+
   const pageBackgroundClass = isDark ? 'bg-slate-900 text-white' : 'bg-gray-50 text-gray-900';
   const cardClass = isDark ? 'bg-slate-800/60 border border-slate-700' : 'bg-white border border-gray-200';
   const mutedPanelClass = isDark ? 'bg-slate-800/40 border border-slate-700/80' : 'bg-gray-50 border border-gray-200/80';
@@ -369,6 +392,17 @@ export default function ExamPage() {
   const setupWebRTC = useCallback(async (stream: MediaStream) => {
     if (!roomId) return;
 
+    // Cleanup existing connection first
+    if (peerRef.current) {
+      peerRef.current.close();
+      peerRef.current = null;
+    }
+    
+    if (channelRef.current) {
+      await channelRef.current.unsubscribe();
+      channelRef.current = null;
+    }
+
     const peer = new RTCPeerConnection({
       iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
     });
@@ -393,25 +427,38 @@ export default function ExamPage() {
 
     channel.on('broadcast', { event: 'viewer-ready' }, async () => {
       if (!peerRef.current) return;
-      const offer = await peerRef.current.createOffer();
-      await peerRef.current.setLocalDescription(offer);
-      await channel.send({
-        type: 'broadcast',
-        event: 'offer',
-        payload: { sdp: offer.sdp },
-      });
+      try {
+        const offer = await peerRef.current.createOffer();
+        await peerRef.current.setLocalDescription(offer);
+        await channel.send({
+          type: 'broadcast',
+          event: 'offer',
+          payload: { sdp: offer.sdp },
+        });
+      } catch (error) {
+        console.error('WebRTC offer creation failed:', error);
+        // Continue exam even if WebRTC fails - proctoring is optional
+      }
     });
 
     channel.on('broadcast', { event: 'answer' }, async ({ payload }) => {
       if (!peerRef.current || !payload?.sdp) return;
-      await peerRef.current.setRemoteDescription(
-        new RTCSessionDescription({ type: 'answer', sdp: payload.sdp })
-      );
+      try {
+        await peerRef.current.setRemoteDescription(
+          new RTCSessionDescription({ type: 'answer', sdp: payload.sdp })
+        );
+      } catch (error) {
+        console.error('WebRTC answer handling failed:', error);
+      }
     });
 
     channel.on('broadcast', { event: 'viewer-candidate' }, async ({ payload }) => {
       if (!peerRef.current || !payload?.candidate) return;
-      await peerRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      try {
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(payload.candidate));
+      } catch (error) {
+        console.error('WebRTC ice candidate failed:', error);
+      }
     });
 
     await channel.subscribe();
@@ -1044,14 +1091,14 @@ export default function ExamPage() {
                               {question.id ?? index + 1}
                             </span>
                             <div className="flex-1 pt-1">
-                              <p className={`${headingTextClass} leading-relaxed`}>{question.prompt}</p>
+                              <p className="text-white text-base leading-relaxed">{question.prompt}</p>
                               {question.type === 'mcq' ? (
                                 <div className="mt-4 space-y-2">
                                   {question.options && question.options.length > 0 ? (
                                     question.options.map((option, optionIndex) => (
                                       <label
                                         key={optionIndex}
-                                        className={`${questionOptionLabelBase} px-3 py-2`}
+                                        className="flex items-center gap-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors cursor-pointer px-3 py-2"
                                       >
                                         <input
                                           type="radio"
@@ -1063,14 +1110,14 @@ export default function ExamPage() {
                                       </label>
                                     ))
                                   ) : (
-                                    <p className={`text-sm mt-3 ${questionOptionEmptyText}`}>
+                                    <p className="text-sm mt-3 text-white/50 italic">
                                       No answer options have been provided yet.
                                     </p>
                                   )}
                                 </div>
                               ) : (
                                 <textarea
-                                  className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass}`}
+                                  className="mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 bg-white/5 border border-white/10 text-white placeholder:text-white/50"
                                   rows={3}
                                   placeholder="Type your answer here..."
                                 />
