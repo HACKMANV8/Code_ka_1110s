@@ -2,6 +2,7 @@
 
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
+import SplitText from '@/components/SplitText';
 
 export const dynamic = 'force-dynamic'
 
@@ -95,17 +96,27 @@ export default function Home() {
       </nav>
 
       {/* Hero Section */}
-      <section className="max-w-7xl mx-auto px-6 lg:px-8 py-16 text-center">
-        <div className="max-w-3xl mx-auto">
+      <section className="relative w-full py-16 text-center overflow-hidden" style={{ minHeight: '500px' }}>
+        <div className="max-w-7xl mx-auto px-6 lg:px-8 relative z-10">
+          <div className="max-w-3xl mx-auto">
           <div className={`inline-block px-4 py-1 rounded-full text-sm font-medium mb-4 ${isDark ? 'bg-blue-500/20 text-blue-300' : 'bg-blue-100 text-blue-700'}`}>
             AI-Powered Proctoring
           </div>
-          <h1 className="text-5xl sm:text-6xl font-bold mb-4 leading-tight">
-            Secure Exams with{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-blue-600">
-              Drishti
-            </span>
-          </h1>
+          <div className="mb-4">
+            <SplitText
+              text="Secure Exams with Drishti"
+              tag="h1"
+              className="text-5xl sm:text-6xl font-bold leading-tight"
+              delay={50}
+              duration={0.6}
+              ease="power3.out"
+              splitType="chars"
+              from={{ opacity: 0, y: 40 }}
+              to={{ opacity: 1, y: 0 }}
+              threshold={0.1}
+              rootMargin="-100px"
+            />
+          </div>
           <p className={`text-lg mb-6 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
             Create, monitor, and review exams with AI-assisted integrity protection.
           </p>
@@ -139,6 +150,7 @@ export default function Home() {
               <div className={`text-xs ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>Support</div>
             </div>
           </div>
+        </div>
         </div>
       </section>
 
