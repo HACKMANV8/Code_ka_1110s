@@ -9,7 +9,39 @@ const __dirname = path.dirname(__filename);
 
 let mainWindow = null;
 let apiContext = null;
-const BLOCKED_DOMAINS = ['reddit.com', 'www.reddit.com'];
+const BLOCKED_DOMAINS = [
+  'reddit.com',
+  'www.reddit.com',
+  'chat.openai.com',
+  'api.openai.com',
+  'labs.openai.com',
+  'claude.ai',
+  'platform.anthropic.com',
+  'gemini.google.com',
+  'bard.google.com',
+  'ai.google.dev',
+  'copilot.microsoft.com',
+  'bing.com',
+  'www.bing.com',
+  'huggingface.co',
+  'poe.com',
+  'chatgpt.com',
+  'cursor.sh',
+  'githubcopilot.com',
+  'perplexity.ai',
+  'www.perplexity.ai',
+  'character.ai',
+  'writesonic.com',
+  'midjourney.com',
+  'discord.com',
+  'www.discord.com',
+  'notion.so',
+  'www.notion.so',
+  'stackblitz.com',
+  'jsfiddle.net',
+  'codepen.io',
+  'glitch.com'
+];
 let networkBlockState = { applied: false };
 
 const updateNetworkBlockState = (data = {}) => {

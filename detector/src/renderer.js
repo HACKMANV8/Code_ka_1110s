@@ -17,6 +17,8 @@ const bridge =
 
 let currentPort = null;
 let latestNetworkBlock = { applied: false };
+const autoScanIntervalRef = { current: null };
+const scanInFlightRef = { current: false };
 
 const setCardMode = ({ running = false, suspicious = false }) => {
   card.classList.toggle('running', running && !suspicious);
@@ -59,6 +61,7 @@ const updateDetails = (baseText) => {
 };
 
 const applyBridgeErrorState = () => {
+  stopAutoScan();
   currentPort = null;
   setCardMode({ running: false, suspicious: false });
   statusPanel.hidden = false;
@@ -78,6 +81,7 @@ const applyBridgeErrorState = () => {
 };
 
 const applyIdleState = () => {
+  stopAutoScan();
   currentPort = null;
   setCardMode({ running: false, suspicious: false });
   statusPanel.hidden = false;
@@ -94,6 +98,13 @@ const applyIdleState = () => {
   if (checkBtn) {
     checkBtn.hidden = true;
     checkBtn.disabled = true;
+  }
+};
+
+const stopAutoScan = () => {
+  if (autoScanIntervalRef.current) {
+    clearInterval(autoScanIntervalRef.current);
+    autoScanIntervalRef.current = null;
   }
 };
 
@@ -127,6 +138,7 @@ const renderStatus = (status) => {
   }
 
   if (!status || !status.running) {
+    stopAutoScan();
     applyIdleState();
     return;
   }
@@ -158,6 +170,8 @@ const renderStatus = (status) => {
       cacheWindowMs: status.cacheWindowMs ?? 0,
     });
   }
+
+  startAutoScan();
 };
 
 const requestStatus = async () => {
@@ -178,41 +192,61 @@ const requestStatus = async () => {
   }
 };
 
-const runScanCheck = async () => {
-  if (!bridge) {
-    applyBridgeErrorState();
+const executeScan = async (manual = false) => {
+  if (!bridge || scanInFlightRef.current) {
+    if (!bridge) {
+      applyBridgeErrorState();
+    }
     return;
   }
 
-  if (checkBtn) {
+  scanInFlightRef.current = true;
+
+  if (manual && checkBtn) {
     checkBtn.hidden = false;
     checkBtn.disabled = true;
     checkBtn.textContent = 'Checking...';
   }
 
-  statusPanel.hidden = false;
-  statusText.textContent = 'Running Scan...';
-  updateDetails('Scanning running processes for camera manipulation tools.');
+  if (manual) {
+    statusPanel.hidden = false;
+    statusText.textContent = 'Running Scan...';
+    updateDetails('Scanning running processes for camera manipulation tools.');
+  }
 
   try {
     const result = await bridge.scanNow();
     applyScanResult(result);
   } catch (error) {
     console.error('Scan failed:', error);
-    setCardMode({ running: true, suspicious: false });
-    statusPanel.hidden = false;
-    const message = error?.message || String(error);
-    statusText.textContent = 'Monitoring Active (error)';
-    updateDetails(`Scan failed: ${message}`);
-    if (message && message.toLowerCase().includes('not running')) {
-      await requestStatus();
+    if (manual) {
+      setCardMode({ running: true, suspicious: false });
+      statusPanel.hidden = false;
+      const message = error?.message || String(error);
+      statusText.textContent = 'Monitoring Active (error)';
+      updateDetails(`Scan failed: ${message}`);
+      if (message && message.toLowerCase().includes('not running')) {
+        await requestStatus();
+      }
     }
   } finally {
-    if (checkBtn) {
+    scanInFlightRef.current = false;
+    if (manual && checkBtn) {
       checkBtn.disabled = false;
       checkBtn.textContent = 'Check Status';
     }
   }
+};
+
+const startAutoScan = () => {
+  if (autoScanIntervalRef.current) {
+    return;
+  }
+  const tick = () => {
+    executeScan(false);
+  };
+  tick();
+  autoScanIntervalRef.current = setInterval(tick, 2000);
 };
 
 startBtn.addEventListener('click', async () => {
@@ -227,7 +261,7 @@ startBtn.addEventListener('click', async () => {
   try {
     const status = await bridge.startMonitoring();
     renderStatus(status);
-    await runScanCheck();
+    startAutoScan();
   } catch (error) {
     console.error('Failed to start monitoring', error);
     startBtn.disabled = false;
@@ -241,7 +275,7 @@ startBtn.addEventListener('click', async () => {
 
 if (checkBtn) {
   checkBtn.addEventListener('click', async () => {
-    await runScanCheck();
+    await executeScan(true);
   });
 }
 
@@ -261,6 +295,7 @@ if (stopBtn) {
       if (status?.networkBlock) {
         latestNetworkBlock = status.networkBlock;
       }
+      stopAutoScan();
       applyIdleState();
       updateDetails('Monitoring stopped.');
     } catch (error) {

@@ -1,55 +1,67 @@
 export const SUSPICIOUS_PROCESS_SIGNATURES = [
   {
-    label: 'OBS Virtual Camera',
-    patterns: ['obs64', 'obs32', 'obs', 'obs-virtualcam']
+    label: "Calculator",
+    patterns: ["Calculator", "CalculatorApp", "CalculatorApp.exe"],
   },
   {
-    label: 'Snap Camera',
-    patterns: ['snap camera', 'snapcamera']
+    label: "OBS Virtual Camera",
+    patterns: ["obs64", "obs32", "obs", "obs-virtualcam"],
   },
   {
-    label: 'ManyCam',
-    patterns: ['manycam']
+    label: "Snap Camera",
+    patterns: ["snap camera", "snapcamera"],
   },
   {
-    label: 'YouCam',
-    patterns: ['youcam']
+    label: "ManyCam",
+    patterns: ["manycam"],
   },
   {
-    label: 'CamTwist',
-    patterns: ['camtwist']
+    label: "YouCam",
+    patterns: ["youcam"],
   },
   {
-    label: 'XSplit',
-    patterns: ['xsplit', 'xsplitvcam']
+    label: "CamTwist",
+    patterns: ["camtwist"],
   },
   {
-    label: 'vMix Video',
-    patterns: ['vmix', 'vmixvcam']
+    label: "XSplit",
+    patterns: ["xsplit", "xsplitvcam"],
   },
   {
-    label: 'AlterCam',
-    patterns: ['altercam']
+    label: "vMix Video",
+    patterns: ["vmix", "vmixvcam"],
   },
   {
-    label: 'Logitech Capture',
-    patterns: ['logi capture', 'logitechcapture', 'logicapture']
+    label: "AlterCam",
+    patterns: ["altercam"],
   },
   {
-    label: 'Virtual Webcam Generic',
-    patterns: ['virtual camera', 'virtualcam', 'vcam', 'fakecam']
+    label: "Logitech Capture",
+    patterns: ["logi capture", "logitechcapture", "logicapture"],
   },
   {
-    label: 'NDI Tools',
-    patterns: ['ndi', 'scanconverter']
+    label: "Virtual Webcam Generic",
+    patterns: ["virtual camera", "virtualcam", "vcam", "fakecam"],
   },
   {
-    label: 'ManyCam Service',
-    patterns: ['mcam']
+    label: "NDI Tools",
+    patterns: ["ndi", "scanconverter"],
   },
   {
-    label: 'Calculator',
-    patterns: ['Calculator']
+    label: "ManyCam Service",
+    patterns: ["mcam"],
+  },
+  {
+    label: "Calculator",
+    patterns: [
+      "calculator",
+      "calculatorapp",
+      "calculatorapp.exe",
+      "calculator.exe",
+      "calc",
+      "Calculator",
+      "CalculatorApp"
+    ],
   }
 ];
 

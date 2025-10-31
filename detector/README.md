@@ -10,7 +10,7 @@ Cross-platform Electron desktop utility that launches a local web API to flag kn
 - Configurable cache window and detection thresholds.
 - Manual “Check Status” control triggers scans via IPC (no background polling) while the API remains available to other tools.
 - Stop the monitoring service from the desktop app when you are done.
-- Signature patterns are matched exactly (case-sensitive) against process names or full command strings.
+- Signature patterns are matched case-insensitively (extension ignored) against process names and command strings.
 - Automatically blocks specified domains (reddit.com, www.reddit.com) while monitoring is active, and lifts the block on stop.
 - Real-time visual state: green glow while monitoring, red alert when suspicious processes are flagged.
 
