@@ -5,6 +5,7 @@ python-multipart==0.0.6
 
 # Azure OpenAI
 openai==1.12.0
+httpx<0.28
 
 # Vector Database & Scientific
 numpy==1.26.4

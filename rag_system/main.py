@@ -3,7 +3,7 @@ FastAPI application for RAG system
 """
 import os
 import shutil
-from typing import List
+from typing import List, Optional, Dict, Any
 from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -74,6 +74,13 @@ class HealthResponse(BaseModel):
     config: dict
 
 
+class ReviewRequest(BaseModel):
+    exam_name: str
+    questions: List[Dict[str, Any]]
+    answers: Optional[List[Dict[str, Any]]] = None
+    result: Optional[Dict[str, Any]] = None
+
+
 # API Endpoints
 
 @app.get("/", response_model=dict)
@@ -86,6 +93,7 @@ async def root():
             "health": "/health",
             "upload": "/upload",
             "query": "/query",
+            "review": "/review",
             "explain": "/explain",
             "clear": "/clear"
         }
@@ -175,6 +183,33 @@ async def query_rag(request: QueryRequest):
         raise HTTPException(status_code=500, detail=f"Error processing query: {str(e)}")
 
 
+@app.post("/review")
+async def generate_review(request: ReviewRequest):
+    """
+    Generate a comprehensive exam review using retrieved exam materials
+    """
+    try:
+        result = rag_engine.generate_exam_review(
+            exam_name=request.exam_name,
+            questions=request.questions,
+            answers=request.answers,
+            result=request.result
+        )
+
+        if result.get("error"):
+            # Preserve informative error while still returning answer text
+            return {
+                "answer": result.get("answer"),
+                "sources": result.get("sources", []),
+                "error": result["error"]
+            }
+
+        return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error generating review: {str(e)}")
+
+
 @app.post("/explain", response_model=dict)
 async def explain_answer(request: ExplanationRequest):
     """
@@ -230,6 +265,7 @@ async def get_stats():
 
 if __name__ == "__main__":
     import uvicorn
+    print(settings.API_PORT)
     uvicorn.run(
         "main:app",
         host=settings.API_HOST,

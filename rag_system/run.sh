@@ -27,5 +27,5 @@ if [ ! -f ".env" ]; then
 fi
 
 # Run the FastAPI server
-echo "Starting FastAPI server on http://localhost:8001"
-uvicorn main:app --reload --port 8001 --host 0.0.0.0
+echo "Starting FastAPI server on http://localhost:8002"
+uvicorn main:app --reload --port 8002 --host 0.0.0.0

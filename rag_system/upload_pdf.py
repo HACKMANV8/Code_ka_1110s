@@ -5,8 +5,8 @@ import requests
 import os
 
 # Configuration
-RAG_API_URL = "http://localhost:8001"
-PDF_PATH = r"C:\Users\Sujal B\OneDrive\Desktop\HACKMAN\inheritance unit 3.pdf"
+RAG_API_URL = os.getenv("RAG_API_URL", "http://localhost:8002")
+PDF_PATH = "inheritance.pdf"
 
 def upload_document(file_path):
     """Upload a document to the RAG system"""

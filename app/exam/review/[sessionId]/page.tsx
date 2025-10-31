@@ -293,6 +293,21 @@ export default function ExamReviewPage() {
           </div>
         </div>
 
+        {/* AI Review Loading State */}
+        {loadingAiReview && (
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 border-4 border-[#FD366E]/30 border-t-[#FD366E] rounded-full animate-spin" />
+              <div>
+                <p className="text-white font-semibold mb-1">Analyzing Exam Materials...</p>
+                <p className="text-white/60 text-sm">
+                  Retrieving the most relevant chunks from the knowledge base and generating your personalized AI review.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* AI Review Section */}
         {showAiReview && aiReview && (
           <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">

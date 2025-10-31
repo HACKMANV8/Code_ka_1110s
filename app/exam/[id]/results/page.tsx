@@ -249,6 +249,17 @@ export default function ExamResultsPage() {
 
   return (
     <div className="min-h-screen bg-[#19191C] py-12 px-4">
+      {reviewLoading && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4">
+          <div className="bg-[#19191C] border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center">
+            <div className="w-12 h-12 border-4 border-[#FD366E]/30 border-t-[#FD366E] rounded-full animate-spin mx-auto mb-4" />
+            <h3 className="text-white font-semibold mb-2">Generating AI Review</h3>
+            <p className="text-white/60 text-sm">
+              We&#39;re fetching supporting context from the vector database and asking the AI tutor to craft feedback.
+            </p>
+          </div>
+        </div>
+      )}
       {/* AI Review Modal */}
       {showReview && aiReview && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
