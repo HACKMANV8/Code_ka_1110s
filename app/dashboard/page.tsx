@@ -5,6 +5,8 @@ import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
 import type { Exam } from '@/lib/types/database'
 
+export const dynamic = 'force-dynamic'
+
 export default function DashboardPage() {
   const [isDark, setIsDark] = useState(true)
   useEffect(() => {

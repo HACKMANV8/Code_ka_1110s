@@ -7,6 +7,8 @@ import Leaderboard from '@/components/admin/Leaderboard'
 import LiveVideoViewer from '@/components/admin/LiveVideoViewer'
 import SnapshotViewer from '@/components/admin/SnapshotViewer'
 
+export const dynamic = 'force-dynamic'
+
 export default function AdminPage() {
   const [isDark, setIsDark] = useState(true)
   useEffect(() => {
