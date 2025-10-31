@@ -6,7 +6,7 @@ export interface Profile {
   updated_at: string;
 }
 
-export type ExamQuestionType = "text" | "mcq";
+export type ExamQuestionType = "text" | "mcq" | "multiple_select" | "true_false";
 
 export interface ExamQuestionOption {
   text: string;
@@ -14,10 +14,14 @@ export interface ExamQuestionOption {
 }
 
 export interface ExamQuestion {
-  id: number;
+  id: number | string;
   prompt: string;
   type: ExamQuestionType;
   options?: ExamQuestionOption[];
+  explanation?: string;
+  topic?: string;
+  difficulty?: string;
+  marks?: number;
 }
 
 export interface Exam {
@@ -86,22 +90,6 @@ export interface SuspiciousSnapshot {
   captured_at: string;
   created_at: string;
   session?: ExamSession;
-}
-
-export interface ExamQuestion {
-  id: string;
-  exam_id: string;
-  question_text: string;
-  question_type: "mcq" | "multiple_select" | "true_false" | "short_answer" | "long_answer";
-  marks: number;
-  order_index: number;
-  explanation: string | null;
-  difficulty_level: "easy" | "medium" | "hard" | null;
-  topic: string | null;
-  created_at: string;
-  updated_at: string;
-  exam?: Exam;
-  options?: QuestionOption[];
 }
 
 export interface QuestionOption {
