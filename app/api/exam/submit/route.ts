@@ -7,7 +7,8 @@ import { createClient } from '@/lib/supabase/server';
  */
 export async function POST(request: NextRequest) {
   try {
-    const { session_id } = await request.json();
+    const payload = await request.json();
+    const { session_id, force_cheat_score, force_status } = payload;
 
     if (!session_id) {
       return NextResponse.json(
@@ -160,15 +161,172 @@ export async function POST(request: NextRequest) {
       passStatus = true;
     }
 
-    // Calculate average cheat score from all recorded scores
-    const { data: scores, error: scoresError } = await supabase
-      .from('cheat_scores')
-      .select('score, confidence')
+    // Get session details
+    const { data: session, error: sessionError } = await supabase
+      .from('exam_sessions')
+      .select('exam_id, student_id')
+      .eq('id', session_id)
+      .single();
+
+    if (sessionError || !session) {
+      return NextResponse.json(
+        { error: 'Session not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get exam details with questions
+    const { data: exam, error: examError } = await supabase
+      .from('exams')
+      .select('questions')
+      .eq('id', session.exam_id)
+      .single();
+
+    if (examError || !exam) {
+      return NextResponse.json(
+        { error: 'Exam not found' },
+        { status: 404 }
+      );
+    }
+
+    // Get student answers
+    const { data: answers, error: answersError } = await supabase
+      .from('student_answers')
+      .select('*')
       .eq('session_id', session_id);
 
-    if (scoresError) {
-      console.error('Error fetching scores:', scoresError);
+    if (answersError) {
+      console.error('Error fetching answers:', answersError);
     }
+
+    // Calculate exam results
+    const questions = exam.questions || [];
+    const totalQuestions = questions.length;
+    const attemptedQuestions = answers?.length || 0;
+    
+    let correctAnswers = 0;
+    let totalMarks = 0;
+    let marksObtained = 0;
+
+    // Calculate correct answers and marks
+    questions.forEach((question: any, index: number) => {
+      const questionId = question.id || (index + 1);
+      const marks = question.marks || 1;
+      totalMarks += marks;
+
+      const answer = answers?.find(a => String(a.question_id) === String(questionId));
+      
+      if (answer) {
+        // Check if answer is correct based on question type
+        let isCorrect = false;
+        
+        if (question.type === 'mcq') {
+          // MCQ: Compare with correct option(s)
+          if (question.options && answer.selected_options && answer.selected_options.length > 0) {
+            const correctOptions = question.options
+              .filter((opt: any) => opt && opt.isCorrect === true)
+              .map((opt: any) => opt.text);
+            
+            // Check if student selected exactly the correct option(s)
+            const selectedOptions = answer.selected_options.filter((opt: any) => opt);
+            
+            if (selectedOptions.length === correctOptions.length) {
+              isCorrect = selectedOptions.every((selected: string) => 
+                correctOptions.includes(selected)
+              );
+            }
+          }
+        } else if (question.type === 'true_false') {
+          // True/False: Compare exact match
+          if (question.options && answer.selected_options && answer.selected_options.length === 1) {
+            const correctOption = question.options.find((opt: any) => opt && opt.isCorrect === true);
+            isCorrect = correctOption && answer.selected_options[0] === correctOption.text;
+          }
+        } else if (question.type === 'text') {
+          // Text questions: Mark as answered (not auto-graded)
+          if (answer.text_answer && answer.text_answer.trim().length > 0) {
+            isCorrect = true; // Assume correct since text needs manual review
+          }
+        }
+        
+        // Update answer record with correct status
+        const updateData = {
+          is_correct: isCorrect,
+          marks_obtained: isCorrect ? marks : 0
+        };
+        
+        // Fire and forget - don't block submission
+        supabase
+          .from('student_answers')
+          .update(updateData)
+          .eq('id', answer.id)
+          .then(({ error }) => {
+            if (error) {
+              console.error('Error updating answer:', error);
+            }
+          });
+        
+        // Update local counters
+        if (isCorrect) {
+          correctAnswers++;
+          marksObtained += marks;
+        }
+      } else {
+        // Question not answered: mark as incorrect with 0 marks
+        // This is handled by not incrementing correctAnswers
+      }
+    });
+
+    const wrongAnswers = attemptedQuestions - correctAnswers;
+    const percentage = totalQuestions > 0 ? Math.round((marksObtained / totalMarks) * 100) : 0;
+
+    // Determine grade
+    let grade = 'F';
+    let passStatus = false;
+    if (percentage >= 90) {
+      grade = 'A+';
+      passStatus = true;
+    } else if (percentage >= 85) {
+      grade = 'A';
+      passStatus = true;
+    } else if (percentage >= 80) {
+      grade = 'B+';
+      passStatus = true;
+    } else if (percentage >= 70) {
+      grade = 'B';
+      passStatus = true;
+    } else if (percentage >= 60) {
+      grade = 'C';
+      passStatus = true;
+    } else if (percentage >= 50) {
+      grade = 'D';
+      passStatus = true;
+    }
+
+    let finalCheatScore = 0;
+    let finalStatus: 'submitted' | 'flagged' = 'submitted';
+
+    if (typeof force_cheat_score === 'number') {
+      finalCheatScore = Math.max(0, Math.min(100, Math.round(force_cheat_score)));
+      if (force_status === 'submitted' || force_status === 'flagged') {
+        finalStatus = force_status;
+      } else {
+        finalStatus = finalCheatScore > 60 ? 'flagged' : 'submitted';
+      }
+    } else {
+      // Calculate average cheat score from all recorded scores
+      const { data: scores, error: scoresError } = await supabase
+        .from('cheat_scores')
+        .select('score, confidence')
+        .eq('session_id', session_id);
+
+      if (scoresError) {
+        console.error('Error fetching scores:', scoresError);
+        return NextResponse.json(
+          { error: 'Failed to calculate cheat score' },
+          { status: 500 }
+        );
+      }
 
     // Calculate weighted average (higher confidence = more weight)
     let totalScore = 0;

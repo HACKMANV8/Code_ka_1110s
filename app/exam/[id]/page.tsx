@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/client';
 import type { ExamQuestion } from '@/lib/types/database';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+const DETECTOR_ENDPOINT = process.env.NEXT_PUBLIC_DETECTOR_URL || 'http://127.0.0.1:4000/scan';
+
 export const dynamic = 'force-dynamic'
 
 interface AnalysisResult {
@@ -39,9 +41,25 @@ export default function ExamPage() {
   const [questionPaneWidth, setQuestionPaneWidth] = useState(0.65);
   const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
   const [isDark, setIsDark] = useState(true);
-  const [studentAnswers, setStudentAnswers] = useState<Map<number | string, any>>(new Map());
-  
+
+  const [detectorWarningActive, setDetectorWarningActive] = useState(false);
+  const [detectorCountdown, setDetectorCountdown] = useState(20);
+  const [detectorWarningMessage, setDetectorWarningMessage] = useState<string>('');
+  const [detectorWarningCount, setDetectorWarningCount] = useState(0);
+  const [detectorStatusDetails, setDetectorStatusDetails] = useState<string | null>(null);
+
   type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
+
+  const addManualAlert = useCallback((alert: string) => {
+    setManualAlerts((prev) => {
+      if (prev.includes(alert)) {
+        return prev;
+      }
+      const next = [...prev, alert];
+      manualAlertsRef.current = next;
+      return next;
+    });
+  }, []);
   
   const normalizeQuestion = (raw: unknown): ParsedQuestion | null => {
     if (!raw) {
@@ -140,6 +158,12 @@ export default function ExamPage() {
   const SNAPSHOT_COOLDOWN = 10000; // 10 seconds between snapshots
   const LOW_SCORE_THRESHOLD = 30; // Only capture if score < 30 (very suspicious)
   const CONSECUTIVE_LOW_SCORES = 3; // Need 3 consecutive low scores
+
+  const detectorWarningCountRef = useRef(0);
+  const detectorWarningActiveRef = useRef(false);
+  const detectorCountdownIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectorPollIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const detectorForcedSubmitRef = useRef(false);
 
   useEffect(() => {
     manualAlertsRef.current = manualAlerts;
@@ -846,7 +870,7 @@ export default function ExamPage() {
   }, [isStarted, sessionId, userId]);
 
   // Submit exam
-  const submitExam = async () => {
+  const submitExam = useCallback(async (options?: { forceCheatScore?: number; forceStatus?: 'submitted' | 'flagged'; reason?: string }) => {
     if (!sessionId) return;
 
     // Stop everything
@@ -864,23 +888,109 @@ export default function ExamPage() {
     setManualAlerts([]);
     setAlerts([]);
 
-    console.log("SUBMITTED");
+    detectorWarningActiveRef.current = false;
+    detectorForcedSubmitRef.current = true;
+    if (detectorCountdownIntervalRef.current) {
+      clearInterval(detectorCountdownIntervalRef.current);
+      detectorCountdownIntervalRef.current = null;
+    }
+    if (detectorPollIntervalRef.current) {
+      clearInterval(detectorPollIntervalRef.current);
+      detectorPollIntervalRef.current = null;
+    }
+
+    console.log('SUBMITTED');
     isStartedRef.current = false;
     setIsStarted(false);
 
-    // Submit exam
+    const payload: Record<string, unknown> = { session_id: sessionId };
+    if (typeof options?.forceCheatScore === 'number') {
+      const clamped = Math.max(0, Math.min(100, Math.round(options.forceCheatScore)));
+      payload.force_cheat_score = clamped;
+    }
+    if (options?.forceStatus) {
+      payload.force_status = options.forceStatus;
+    }
+
     const response = await fetch('/api/exam/submit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ session_id: sessionId }),
+      body: JSON.stringify(payload),
     });
 
     const result = await response.json();
     if (result.success) {
-      // Redirect to results page with score and status
       router.push(`/exam/${examId}/results?score=${result.final_cheat_score}&status=${result.status}&sessionId=${sessionId}`);
     }
-  };
+  }, [examId, router, sessionId]);
+
+  const clearDetectorCountdown = useCallback(() => {
+    if (detectorCountdownIntervalRef.current) {
+      clearInterval(detectorCountdownIntervalRef.current);
+      detectorCountdownIntervalRef.current = null;
+    }
+  }, []);
+
+  const finalizeDetectorViolation = useCallback(() => {
+    detectorWarningActiveRef.current = false;
+    setDetectorWarningActive(false);
+    setDetectorCountdown(0);
+    clearDetectorCountdown();
+    submitExam({ forceCheatScore: 0, forceStatus: 'flagged' });
+  }, [clearDetectorCountdown, submitExam]);
+
+  const startDetectorCountdown = useCallback((result: any) => {
+    if (detectorForcedSubmitRef.current) {
+      return;
+    }
+
+    const nextCount = detectorWarningCountRef.current + 1;
+    detectorWarningCountRef.current = nextCount;
+    setDetectorWarningCount(nextCount);
+
+    detectorWarningActiveRef.current = true;
+    setDetectorWarningActive(true);
+    setDetectorCountdown(20);
+
+    const suspiciousProcesses = Array.isArray(result?.findings)
+      ? result.findings
+          .map((finding: any) => finding?.name || finding?.match?.signature || finding?.match?.label)
+          .filter((item: unknown): item is string => typeof item === 'string')
+          .slice(0, 3)
+      : [];
+
+    const message = suspiciousProcesses.length > 0
+      ? `Detected unauthorized application: ${suspiciousProcesses.join(', ')}.`
+      : 'Detected unauthorized external manipulation.';
+
+    setDetectorWarningMessage(message);
+    setDetectorStatusDetails(null);
+
+    clearDetectorCountdown();
+    detectorCountdownIntervalRef.current = setInterval(() => {
+      setDetectorCountdown((prev) => {
+        if (prev <= 1) {
+          clearDetectorCountdown();
+          finalizeDetectorViolation();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }, [clearDetectorCountdown, finalizeDetectorViolation]);
+
+  const resolveDetectorWarning = useCallback(() => {
+    if (!detectorWarningActiveRef.current) {
+      return;
+    }
+    clearDetectorCountdown();
+    detectorWarningActiveRef.current = false;
+    setDetectorWarningActive(false);
+    setDetectorCountdown(20);
+    setDetectorWarningMessage('');
+    addManualAlert('external_manipulation_detected');
+    setDetectorStatusDetails('External manipulation attempt logged. You may continue.');
+  }, [addManualAlert, clearDetectorCountdown]);
 
   // Save student answer for MCQ questions
   const handleMCQAnswer = async (questionId: number | string, selectedOption: string) => {
@@ -987,6 +1097,97 @@ export default function ExamPage() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!isStarted) {
+      if (detectorPollIntervalRef.current) {
+        clearInterval(detectorPollIntervalRef.current);
+        detectorPollIntervalRef.current = null;
+      }
+      clearDetectorCountdown();
+      detectorWarningActiveRef.current = false;
+      setDetectorWarningActive(false);
+      setDetectorCountdown(20);
+      setDetectorWarningMessage('');
+      setDetectorStatusDetails(null);
+      detectorForcedSubmitRef.current = false;
+      return;
+    }
+
+    detectorForcedSubmitRef.current = false;
+    let cancelled = false;
+
+    const pollDetector = async () => {
+      try {
+        const response = await fetch(DETECTOR_ENDPOINT, {
+          method: 'GET',
+          cache: 'no-store',
+        });
+
+        if (!response.ok) {
+          throw new Error(`Detector responded with ${response.status}`);
+        }
+
+        const data = await response.json();
+        if (cancelled) return;
+
+        const flaggedCount = Number.isFinite(data?.flaggedProcessCount)
+          ? Number(data.flaggedProcessCount)
+          : Array.isArray(data?.findings)
+          ? data.findings.length
+          : 0;
+
+        const hasIssue = flaggedCount > 0;
+
+        if (hasIssue) {
+          setDetectorStatusDetails(null);
+          if (detectorWarningActiveRef.current) {
+            return;
+          }
+          if (detectorWarningCountRef.current >= 2) {
+            if (!detectorForcedSubmitRef.current) {
+              detectorForcedSubmitRef.current = true;
+              submitExam({ forceCheatScore: 100, forceStatus: 'flagged' });
+            }
+            return;
+          }
+          startDetectorCountdown(data);
+        } else {
+          if (detectorWarningActiveRef.current) {
+            resolveDetectorWarning();
+          } else {
+            setDetectorStatusDetails(null);
+          }
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Detector polling error:', error);
+        setDetectorStatusDetails('Unable to reach monitoring service. Ensure the detector app is running.');
+      }
+    };
+
+    pollDetector();
+    detectorPollIntervalRef.current = setInterval(pollDetector, 3000);
+
+    return () => {
+      cancelled = true;
+      if (detectorPollIntervalRef.current) {
+        clearInterval(detectorPollIntervalRef.current);
+        detectorPollIntervalRef.current = null;
+      }
+    };
+  }, [clearDetectorCountdown, isStarted, resolveDetectorWarning, startDetectorCountdown, submitExam]);
+
+  useEffect(() => {
+    if (!detectorStatusDetails) {
+      return;
+    }
+    const timeout = setTimeout(() => {
+      setDetectorStatusDetails(null);
+    }, 8000);
+
+    return () => clearTimeout(timeout);
+  }, [detectorStatusDetails]);
+
   return (
     <div className={`min-h-screen py-8 transition-colors duration-300 ${pageBackgroundClass}`}>
       {/* Fullscreen Re-enter Button */}
@@ -1022,6 +1223,54 @@ export default function ExamPage() {
                 Return to Fullscreen
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {detectorWarningActive && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 px-4">
+          <div
+            className={`max-w-lg w-full rounded-2xl p-8 shadow-2xl border ${
+              isDark
+                ? 'bg-red-900/90 border-red-500/60 text-red-100'
+                : 'bg-white border-red-200 text-red-700'
+            }`}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-red-600/80 text-white shadow-lg">
+                <svg className="h-6 w-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-lg font-semibold">High Alert: External Manipulation Detected</p>
+                <p className="text-sm opacity-80">Warning {detectorWarningCount} of 2</p>
+              </div>
+            </div>
+            <p className="mb-4 leading-relaxed">
+              {detectorWarningMessage || 'Unauthorized software interacting with your camera was detected. Close all external applications immediately.'}
+            </p>
+            <div className={`mb-6 rounded-xl border px-4 py-3 text-center ${isDark ? 'border-red-500/40 bg-red-500/10 text-red-100' : 'border-red-200 bg-red-50 text-red-700'}`}>
+              <p className="text-sm font-medium">Exam will auto-submit in</p>
+              <p className="mt-1 text-4xl font-bold">{detectorCountdown}s</p>
+            </div>
+            <p className="text-sm opacity-80">
+              Close any external screen-sharing, virtual camera, or manipulation tools immediately to avoid automatic termination of your exam.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {detectorStatusDetails && !detectorWarningActive && (
+        <div className="fixed bottom-6 left-1/2 z-40 -translate-x-1/2 px-4">
+          <div
+            className={`rounded-xl px-5 py-3 shadow-lg border ${
+              isDark
+                ? 'bg-yellow-500/20 border-yellow-400/40 text-yellow-100'
+                : 'bg-yellow-50 border-yellow-200 text-yellow-700'
+            }`}
+          >
+            {detectorStatusDetails}
           </div>
         </div>
       )}
@@ -1352,7 +1601,7 @@ export default function ExamPage() {
                   </button>
                 ) : (
                   <button
-                    onClick={submitExam}
+                    onClick={() => submitExam()}
                     className="flex-1 bg-gradient-to-r from-emerald-500 to-emerald-600 hover:shadow-lg text-white font-semibold py-3.5 px-6 rounded-lg transition-all flex items-center justify-center gap-2"
                   >
                     <span>✅</span> Submit Exam
