@@ -94,40 +94,32 @@ export default function AdminPage() {
 
   if (loading) {
     return (
-      <div className={`min-h-screen flex items-center justify-center bg-[#19191C]`}> 
-        <div className={isDark ? 'text-white/60' : 'text-gray-600'}>Loading...</div>
+      <div className={`min-h-screen flex items-center justify-center transition-colors ${isDark ? 'bg-slate-900' : 'bg-white'}`}> 
+        <div className={isDark ? 'text-gray-400' : 'text-gray-600'}>Loading...</div>
       </div>
     )
   }
 
   return (
-  <div className={`min-h-screen transition-colors duration-300 bg-[#19191C]`}> 
+  <div className={`min-h-screen transition-colors duration-300 ${isDark ? 'bg-slate-900' : 'bg-white'}`}> 
       {/* Navigation */}
-      <nav className={`bg-white/5 border-white/10 backdrop-blur-md shadow-sm border-b`}>
+      <nav className={`border-b backdrop-blur-sm ${isDark ? 'bg-slate-800/50 border-slate-700' : 'bg-white/50 border-gray-200'}`}>
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between h-16 items-center">
             <div className="flex items-center gap-4">
-              <h1 className={`text-xl font-bold text-white`}>Admin Dashboard</h1>
-              <span className="px-3 py-1 bg-gradient-to-r from-[#FD366E]/20 to-[#FF6B9D]/20 text-[#FD366E] text-xs font-semibold rounded-full border border-[#FD366E]/30">ADMIN</span>
+              <h1 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Admin Dashboard</h1>
+              <span className={`px-3 py-1 text-xs font-semibold rounded-full border ${isDark ? 'bg-blue-500/20 text-blue-300 border-blue-500/30' : 'bg-blue-100 text-blue-700 border-blue-300'}`}>ADMIN</span>
             </div>
             <div className="flex items-center gap-4">
-              <span className={`text-sm text-white/70`}>{user?.user_metadata?.full_name || user?.email}</span>
+              <span className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>{user?.user_metadata?.full_name || user?.email}</span>
               <button
                 onClick={toggleTheme}
-                className={`p-2 rounded-lg transition-colors bg-white/10 hover:bg-white/20`}
+                className={`p-2 rounded-lg transition-colors ${isDark ? 'bg-slate-700 hover:bg-slate-600' : 'bg-gray-100 hover:bg-gray-200'}`}
                 aria-label="Toggle theme"
               >
-                {isDark ? (
-                  <svg className="w-5 h-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fillRule="evenodd" d="M10 2a1 1 0 011 1v1a1 1 0 11-2 0V3a1 1 0 011-1zm4 8a4 4 0 11-8 0 4 4 0 018 0zm-.464 4.95l.707.707a1 1 0 001.414-1.414l-.707-.707a1 1 0 00-1.414 1.414zm2.12-10.607a1 1 0 010 1.414l-.706.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0zM17 11a1 1 0 100-2h-1a1 1 0 100 2h1zm-7 4a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zM5.05 6.464A1 1 0 106.465 5.05l-.708-.707a1 1 0 00-1.414 1.414l.707.707zm1.414 8.486l-.707.707a1 1 0 01-1.414-1.414l.707-.707a1 1 0 011.414 1.414zM4 11a1 1 0 100-2H3a1 1 0 000 2h1z" clipRule="evenodd" />
-                  </svg>
-                ) : (
-                  <svg className="w-5 h-5 text-gray-700" fill="currentColor" viewBox="0 0 20 20">
-                    <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-                  </svg>
-                )}
+                {isDark ? '☀️' : '🌙'}
               </button>
-              <button onClick={handleSignOut} className={`text-sm font-medium text-red-400 hover:text-red-300`}>Sign out</button>
+              <button onClick={handleSignOut} className={`text-sm font-medium transition-colors ${isDark ? 'text-red-400 hover:text-red-300' : 'text-red-600 hover:text-red-700'}`}>Sign out</button>
             </div>
           </div>
         </div>
@@ -136,10 +128,10 @@ export default function AdminPage() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Header */}
         <div className="mb-8">
-          <h2 className={`text-3xl font-bold mb-2 text-white`}>
+          <h2 className={`text-3xl font-bold mb-2 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             {activeTab === 'live' ? 'Live Exam Monitoring' : 'Student Snapshots Archive'}
           </h2>
-          <p className={isDark ? 'text-white/60' : 'text-gray-600'}>
+          <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
             {activeTab === 'live' 
               ? 'Real-time average cheat score tracking'
               : 'Review and download captured suspicious activity snapshots'
@@ -148,13 +140,13 @@ export default function AdminPage() {
         </div>
 
         {/* Tabs */}
-        <div className="mb-6 flex gap-4 border-b border-white/10">
+        <div className={`mb-6 flex gap-4 border-b ${isDark ? 'border-slate-700' : 'border-gray-300'}`}>
           <button
             onClick={() => setActiveTab('live')}
             className={`px-4 py-2 font-medium transition-all ${
               activeTab === 'live'
-                ? 'text-[#FD366E] border-b-2 border-[#FD366E]'
-                : 'text-white/50 hover:text-white/70'
+                ? `text-blue-600 border-b-2 border-blue-600 ${isDark ? 'text-blue-400' : 'text-blue-600'}`
+                : isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             Live Monitoring
@@ -163,8 +155,8 @@ export default function AdminPage() {
             onClick={() => setActiveTab('snapshots')}
             className={`px-4 py-2 font-medium transition-all ${
               activeTab === 'snapshots'
-                ? 'text-[#FD366E] border-b-2 border-[#FD366E]'
-                : 'text-white/50 hover:text-white/70'
+                ? `text-blue-600 border-b-2 border-blue-600 ${isDark ? 'text-blue-400' : 'text-blue-600'}`
+                : isDark ? 'text-gray-400 hover:text-gray-300' : 'text-gray-500 hover:text-gray-700'
             }`}
           >
             Snapshots Archive
@@ -176,11 +168,11 @@ export default function AdminPage() {
           <>
             {/* Filter by Exam */}
             <div className="mb-6 flex items-center gap-4">
-              <label className={`text-sm font-medium text-white/70`}>Filter by Exam:</label>
+              <label className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Filter by Exam:</label>
               <select
                 value={activeExam || ''}
                 onChange={(e) => setActiveExam(e.target.value || undefined)}
-                className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] backdrop-blur-sm border-white/10 bg-white/5 text-white [&>option]:bg-gray-800 [&>option]:text-white`}
+                className={`px-4 py-2 border rounded-lg focus:ring-2 focus:ring-blue-600 focus:border-blue-600 transition-all ${isDark ? 'bg-slate-700/50 border-slate-600 text-white [&>option]:bg-slate-800 [&>option]:text-white' : 'bg-white border-gray-300 text-gray-900 [&>option]:bg-white [&>option]:text-gray-900'}`}
               >
                 <option value="">All Active Exams</option>
                 {exams.map((exam) => (
@@ -190,18 +182,18 @@ export default function AdminPage() {
             </div>
 
             {/* Leaderboard */}
-            <div className={`border rounded-lg shadow-lg p-6 backdrop-blur-sm bg-white/5 border-white/10`}>
+            <div className={`border rounded-lg shadow-lg p-6 ${isDark ? 'bg-slate-800/30 border-slate-700' : 'bg-white border-gray-200'}`}>
               <div className="flex items-center justify-between mb-6">
                 <div>
-                  <h3 className={`text-xl font-bold text-white`}>Active Students (Sorted by Risk)</h3>
-                  <p className={`text-sm mt-1 text-white/60`}>Updates every 3 seconds - Average cheat score</p>
+                  <h3 className={`text-xl font-bold ${isDark ? 'text-white' : 'text-gray-900'}`}>Active Students (Sorted by Risk)</h3>
+                  <p className={`text-sm mt-1 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Updates every 3 seconds - Average cheat score</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <span className="relative flex h-3 w-3">
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
                   </span>
-                  <span className={`text-sm font-medium text-white/70`}>Live</span>
+                  <span className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Live</span>
                 </div>
               </div>
 

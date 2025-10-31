@@ -32,26 +32,18 @@ interface SnapshotViewerProps {
 export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
   const [snapshots, setSnapshots] = useState<Snapshot[]>([])
   const [loading, setLoading] = useState(false)
-  const [searchType, setSearchType] = useState<'studentId' | 'sessionId' | 'examId' | 'email'>('sessionId')
   const [searchValue, setSearchValue] = useState('')
-  const [exams, setExams] = useState<any[]>([])
   const [students, setStudents] = useState<any[]>([])
   const [selectedSnapshot, setSelectedSnapshot] = useState<Snapshot | null>(null)
   
   const supabase = createClient()
 
   useEffect(() => {
-    fetchExams()
     fetchStudents()
   }, [])
 
   const fetchExams = async () => {
-    const { data } = await supabase
-      .from('exams')
-      .select('id, title')
-      .order('created_at', { ascending: false })
-    
-    setExams(data || [])
+    // No longer needed - removed from component
   }
 
   const fetchStudents = async () => {
@@ -65,24 +57,15 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
   }
 
   const fetchSnapshots = async () => {
-    if (!searchValue && searchType !== 'examId') {
-      alert('Please enter a search value')
+    if (!searchValue) {
+      alert('Please select a student')
       return
     }
 
     setLoading(true)
     try {
       const params = new URLSearchParams()
-      
-      if (searchType === 'studentId') {
-        params.append('studentId', searchValue)
-      } else if (searchType === 'sessionId') {
-        params.append('sessionId', searchValue)
-      } else if (searchType === 'examId') {
-        params.append('examId', searchValue)
-      } else if (searchType === 'email') {
-        params.append('studentEmail', searchValue)
-      }
+      params.append('studentId', searchValue)
 
       const response = await fetch(`/api/admin/snapshots?${params.toString()}`)
       const data = await response.json()
@@ -141,95 +124,40 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
   return (
     <div className="space-y-6">
       {/* Search Section */}
-      <div className={`rounded-lg p-6 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+      <div className={`rounded-lg p-6 ${isDark ? 'bg-slate-800/30 border border-slate-700' : 'bg-white border border-gray-200'}`}>
         <h2 className={`text-xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
           Search Student Snapshots
         </h2>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-          <div>
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white/70' : 'text-gray-700'}`}>
-              Search By
+          <div className="md:col-span-3">
+            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+              Select Student
             </label>
+            
             <select
-              value={searchType}
-              onChange={(e) => setSearchType(e.target.value as any)}
-              className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] ${
+              value={searchValue}
+              onChange={(e) => setSearchValue(e.target.value)}
+              className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-blue-600 focus:border-blue-600 ${
                 isDark 
-                  ? 'bg-white/5 border-white/10 text-white [&>option]:bg-gray-800 [&>option]:text-white' 
+                  ? 'bg-slate-700/50 border-slate-600 text-white [&>option]:bg-slate-800 [&>option]:text-white' 
                   : 'bg-white border-gray-300 text-gray-900 [&>option]:bg-white [&>option]:text-gray-900'
               }`}
             >
-              <option value="sessionId">Session ID</option>
-              <option value="studentId">Student ID</option>
-              <option value="examId">Exam</option>
-              <option value="email">Student Email</option>
+              <option value="">Select a student...</option>
+              {students.map((student: any) => (
+                <option key={student.id} value={student.id}>
+                  {student.full_name || 'Unnamed Student'}
+                </option>
+              ))}
             </select>
-          </div>
-
-          <div className="md:col-span-2">
-            <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-white/70' : 'text-gray-700'}`}>
-              Search Value
-            </label>
-            
-            {searchType === 'examId' ? (
-              <select
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] ${
-                  isDark 
-                    ? 'bg-white/5 border-white/10 text-white [&>option]:bg-gray-800 [&>option]:text-white' 
-                    : 'bg-white border-gray-300 text-gray-900 [&>option]:bg-white [&>option]:text-gray-900'
-                }`}
-              >
-                <option value="">Select an exam...</option>
-                {exams.map((exam) => (
-                  <option key={exam.id} value={exam.id}>
-                    {exam.title}
-                  </option>
-                ))}
-              </select>
-            ) : searchType === 'studentId' ? (
-              <select
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] ${
-                  isDark 
-                    ? 'bg-white/5 border-white/10 text-white [&>option]:bg-gray-800 [&>option]:text-white' 
-                    : 'bg-white border-gray-300 text-gray-900 [&>option]:bg-white [&>option]:text-gray-900'
-                }`}
-              >
-                <option value="">Select a student...</option>
-                {students.map((student) => (
-                  <option key={student.id} value={student.id}>
-                    {student.full_name || 'Unnamed Student'}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="text"
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder={
-                  searchType === 'sessionId' 
-                    ? 'Enter session ID...' 
-                    : 'Enter student email...'
-                }
-                className={`w-full px-4 py-2 rounded-lg border focus:ring-2 focus:ring-[#FD366E] focus:border-[#FD366E] ${
-                  isDark 
-                    ? 'bg-white/5 border-white/10 text-white placeholder-white/40' 
-                    : 'bg-white border-gray-300 text-gray-900 placeholder-gray-400'
-                }`}
-              />
-            )}
           </div>
         </div>
 
         <button
           onClick={fetchSnapshots}
           disabled={loading}
-          className="w-full md:w-auto px-6 py-2 bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] text-white font-medium rounded-lg hover:shadow-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          className="w-full md:w-auto px-6 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
         >
           {loading ? 'Searching...' : 'Search Snapshots'}
         </button>
@@ -237,7 +165,7 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
 
       {/* Results Section */}
       {snapshots.length > 0 && (
-        <div className={`rounded-lg p-6 ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
+        <div className={`rounded-lg p-6 ${isDark ? 'bg-slate-800/30 border border-slate-700' : 'bg-white border border-gray-200'}`}>
           <h2 className={`text-xl font-bold mb-4 ${isDark ? 'text-white' : 'text-gray-900'}`}>
             Found {snapshots.length} Snapshot{snapshots.length !== 1 ? 's' : ''}
           </h2>
@@ -248,8 +176,8 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
                 key={snapshot.id}
                 className={`rounded-lg overflow-hidden cursor-pointer transition-all hover:scale-105 ${
                   isDark 
-                    ? 'bg-white/5 border border-white/10 hover:border-[#FD366E]' 
-                    : 'bg-gray-50 border border-gray-200 hover:border-[#FD366E]'
+                    ? 'bg-slate-700/50 border border-slate-600 hover:border-blue-500' 
+                    : 'bg-gray-50 border border-gray-200 hover:border-blue-400'
                 }`}
                 onClick={() => setSelectedSnapshot(snapshot)}
               >
@@ -306,9 +234,9 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
       )}
 
       {!loading && snapshots.length === 0 && searchValue && (
-        <div className={`rounded-lg p-12 text-center ${isDark ? 'bg-white/5 border border-white/10' : 'bg-white border border-gray-200'}`}>
-          <p className={isDark ? 'text-white/60' : 'text-gray-600'}>
-            No snapshots found for this search
+        <div className={`rounded-lg p-12 text-center ${isDark ? 'bg-slate-800/30 border border-slate-700' : 'bg-white border border-gray-200'}`}>
+          <p className={isDark ? 'text-gray-300' : 'text-gray-600'}>
+            No snapshots found for this student
           </p>
         </div>
       )}
@@ -321,7 +249,7 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
         >
           <div
             className={`max-w-4xl w-full rounded-lg overflow-hidden ${
-              isDark ? 'bg-gray-900' : 'bg-white'
+              isDark ? 'bg-slate-800' : 'bg-white'
             }`}
             onClick={(e) => e.stopPropagation()}
           >
@@ -378,7 +306,7 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
               <div className="flex gap-3">
                 <button
                   onClick={() => downloadSnapshot(selectedSnapshot)}
-                  className="flex-1 px-4 py-2 bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] text-white font-medium rounded-lg hover:shadow-lg transition-all"
+                  className="flex-1 px-4 py-2 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-all"
                 >
                   Download Snapshot
                 </button>
@@ -386,7 +314,7 @@ export default function SnapshotViewer({ isDark = true }: SnapshotViewerProps) {
                   onClick={() => setSelectedSnapshot(null)}
                   className={`flex-1 px-4 py-2 font-medium rounded-lg transition-all ${
                     isDark 
-                      ? 'bg-white/10 hover:bg-white/20 text-white' 
+                      ? 'bg-slate-700 hover:bg-slate-600 text-white' 
                       : 'bg-gray-200 hover:bg-gray-300 text-gray-900'
                   }`}
                 >
