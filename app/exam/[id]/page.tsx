@@ -47,6 +47,7 @@ export default function ExamPage() {
   const [detectorWarningMessage, setDetectorWarningMessage] = useState<string>('');
   const [detectorWarningCount, setDetectorWarningCount] = useState(0);
   const [detectorStatusDetails, setDetectorStatusDetails] = useState<string | null>(null);
+  const [studentAnswers, setStudentAnswers] = useState<Map<number | string, any>>(new Map());
 
   type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
 
