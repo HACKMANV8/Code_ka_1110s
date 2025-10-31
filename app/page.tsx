@@ -3,6 +3,8 @@
 import Link from 'next/link';
 import { useState, useEffect } from 'react';
 
+export const dynamic = 'force-dynamic'
+
 export default function Home() {
   const [isDark, setIsDark] = useState(false);
 

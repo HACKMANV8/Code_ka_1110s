@@ -5,6 +5,8 @@ import { useRouter, useParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 
+export const dynamic = 'force-dynamic'
+
 interface AnalysisResult {
   success: boolean;
   focus_score: number;

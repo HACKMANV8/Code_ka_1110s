@@ -5,6 +5,8 @@ import { useRouter, useParams, useSearchParams } from 'next/navigation';
 import { createClient } from '@/lib/supabase/client';
 import Link from 'next/link';
 
+export const dynamic = 'force-dynamic'
+
 export default function ExamResultsPage() {
   const params = useParams();
   const searchParams = useSearchParams();
