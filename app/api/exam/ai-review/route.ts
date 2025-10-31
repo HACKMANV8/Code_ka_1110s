@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+export const runtime = 'nodejs';
+
 interface Question {
   id: number;
   type: 'mcq' | 'text' | 'multiple_select' | 'true_false';
@@ -225,8 +229,10 @@ async function getGeminiReview(prompt: string): Promise<{ text: string; tokens: 
     throw new Error('Gemini API key not configured. Please set GEMINI_API_KEY environment variable.');
   }
 
-  // Use v1 endpoint with latest model (v1beta is deprecated)
+  // Use v1 endpoint with latest model
   const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+
+  console.log('Calling Gemini API with URL:', url.replace(apiKey, '***'));
 
   try {
     const response = await fetch(url, {
@@ -256,11 +262,14 @@ async function getGeminiReview(prompt: string): Promise<{ text: string; tokens: 
       console.error('Gemini API error:', {
         status: response.status,
         statusText: response.statusText,
+        url: url.replace(apiKey, '***'),
         error: errorText,
       });
       
       if (response.status === 401) {
-        throw new Error('Gemini API authentication failed. Check your API key.');
+        throw new Error('Gemini API authentication failed. Invalid or expired API key.');
+      } else if (response.status === 404) {
+        throw new Error('Gemini API endpoint not found. The model or endpoint may have changed.');
       } else if (response.status === 429) {
         throw new Error('Gemini API rate limit exceeded. Please try again later.');
       } else {

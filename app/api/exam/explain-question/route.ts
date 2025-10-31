@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 interface Question {
   id: number;
   type: 'mcq' | 'text' | 'multiple_select' | 'true_false';
@@ -83,14 +86,14 @@ export async function POST(request: NextRequest) {
       .from('student_answers')
       .select('*')
       .eq('session_id', session_id)
-      .eq('question_id', String(question_id))
+      .eq('question_id', question_id)
       .single();
 
-    // Prepare prompt for Azure OpenAI
+    // Prepare prompt for AI
     const prompt = buildExplanationPrompt(question, studentAnswer);
 
-    // Call Azure OpenAI
-    const explanation = await getAzureOpenAIExplanation(prompt);
+    // Call Gemini AI for explanation
+    const explanation = await getGeminiExplanation(prompt);
 
     // Save to review history
     await supabase
@@ -98,7 +101,7 @@ export async function POST(request: NextRequest) {
       .insert({
         session_id,
         student_id: user.id,
-        question_id: String(question_id),
+        question_id: question_id,
         requested_ai_explanation: true,
         ai_explanation_text: explanation.text,
         ai_explanation_tokens: explanation.tokens,
@@ -176,53 +179,6 @@ Keep the explanation concise but thorough (200-300 words).`;
   return prompt;
 }
 
-async function getAzureOpenAIExplanation(prompt: string): Promise<{ text: string; tokens: number }> {
-  const apiKey = process.env.AZURE_OPENAI_API_KEY;
-  const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
-
-  // If Azure credentials are not available, fall back to Gemini
-  if (!apiKey || !endpoint) {
-    console.log('Azure OpenAI not configured, using Gemini instead');
-    return getGeminiExplanation(prompt);
-  }
-
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'api-key': apiKey,
-    },
-    body: JSON.stringify({
-      messages: [
-        {
-          role: 'system',
-          content: 'You are an expert educator who provides clear, concise, and helpful explanations for exam questions.',
-        },
-        {
-          role: 'user',
-          content: prompt,
-        },
-      ],
-      max_tokens: 800,
-      temperature: 0.7,
-      top_p: 0.95,
-    }),
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    console.error('Azure OpenAI API error:', error);
-    throw new Error('Failed to get explanation from Azure OpenAI');
-  }
-
-  const data = await response.json();
-  
-  return {
-    text: data.choices[0].message.content,
-    tokens: data.usage?.total_tokens || 0,
-  };
-}
-
 async function getGeminiExplanation(prompt: string): Promise<{ text: string; tokens: number }> {
   const apiKey = process.env.GEMINI_API_KEY;
 
@@ -230,7 +186,7 @@ async function getGeminiExplanation(prompt: string): Promise<{ text: string; tok
     throw new Error('Gemini API key not configured. Please set GEMINI_API_KEY environment variable.');
   }
 
-  // Use v1 endpoint with latest model (v1beta is deprecated)
+  // Use v1 endpoint with latest model
   const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
 
   try {
@@ -266,6 +222,8 @@ async function getGeminiExplanation(prompt: string): Promise<{ text: string; tok
       
       if (response.status === 401) {
         throw new Error('Gemini API authentication failed. Check your API key.');
+      } else if (response.status === 404) {
+        throw new Error('Gemini API endpoint not found. The model or endpoint may have changed.');
       } else if (response.status === 429) {
         throw new Error('Gemini API rate limit exceeded. Please try again later.');
       } else {

@@ -884,7 +884,12 @@ export default function ExamPage() {
 
   // Save student answer for MCQ questions
   const handleMCQAnswer = async (questionId: number | string, selectedOption: string) => {
-    if (!sessionId) return;
+    if (!sessionId) {
+      console.error('Cannot save answer: sessionId is missing');
+      return;
+    }
+
+    console.log(`Saving MCQ answer - Question: ${questionId}, Option: "${selectedOption}"`);
 
     const answer = {
       session_id: sessionId,
@@ -897,29 +902,49 @@ export default function ExamPage() {
       // Upsert will update if exists (due to UNIQUE constraint), insert if new
       const { data, error } = await supabase
         .from('student_answers')
-        .upsert([answer]);
+        .upsert([answer], {
+          onConflict: 'session_id,question_id'
+        });
       
       if (error) {
-        console.error('Error upserting MCQ answer:', { error, answer });
+        console.error('Error upserting MCQ answer:', { 
+          error, 
+          answer,
+          questionId,
+          selectedOption 
+        });
+        alert('Failed to save answer. Please try again.');
+        return;
       } else {
-        console.log('MCQ answer upserted successfully');
+        console.log(`✓ MCQ answer saved successfully for question ${questionId}`);
       }
 
+      // Update local state
       setStudentAnswers((prev) => {
         const newMap = new Map(prev);
         newMap.set(questionId, answer);
         return newMap;
       });
 
-      console.log('Answer saved:', questionId, selectedOption);
     } catch (error) {
-      console.error('Error saving answer:', error);
+      console.error('Exception while saving answer:', error);
+      alert('An error occurred while saving your answer. Please try again.');
     }
   };
 
   // Save student answer for text questions
   const handleTextAnswer = async (questionId: number | string, text: string) => {
-    if (!sessionId || !text.trim()) return;
+    if (!sessionId) {
+      console.error('Cannot save answer: sessionId is missing');
+      return;
+    }
+    
+    if (!text.trim()) {
+      console.log(`Skipping empty text answer for question ${questionId}`);
+      return;
+    }
+
+    console.log(`Saving text answer - Question: ${questionId}, Length: ${text.length} chars`);
 
     const answer = {
       session_id: sessionId,
@@ -932,23 +957,32 @@ export default function ExamPage() {
       // Upsert will update if exists (due to UNIQUE constraint), insert if new
       const { data, error } = await supabase
         .from('student_answers')
-        .upsert([answer]);
+        .upsert([answer], {
+          onConflict: 'session_id,question_id'
+        });
       
       if (error) {
-        console.error('Error upserting text answer:', { error, answer });
+        console.error('Error upserting text answer:', { 
+          error, 
+          answer,
+          questionId 
+        });
+        alert('Failed to save answer. Please try again.');
+        return;
       } else {
-        console.log('Text answer upserted successfully');
+        console.log(`✓ Text answer saved successfully for question ${questionId}`);
       }
 
+      // Update local state
       setStudentAnswers((prev) => {
         const newMap = new Map(prev);
         newMap.set(questionId, answer);
         return newMap;
       });
 
-      console.log('Text answer saved:', questionId);
     } catch (error) {
-      console.error('Error saving text answer:', error);
+      console.error('Exception while saving text answer:', error);
+      alert('An error occurred while saving your answer. Please try again.');
     }
   };
 

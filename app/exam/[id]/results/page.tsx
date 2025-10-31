@@ -49,6 +49,7 @@ export default function ExamResultsPage() {
           sessionId: sessionIdParam,
           score: searchParams.get('score'),
           status: searchParams.get('status'),
+          allParams: Object.fromEntries(searchParams.entries())
         });
         
         if (!sessionIdParam || sessionIdParam === 'undefined' || sessionIdParam.trim() === '') {
@@ -65,11 +66,15 @@ export default function ExamResultsPage() {
         }
 
         // Fetch exam details
-        const { data: exam } = await supabase
+        const { data: exam, error: examError } = await supabase
           .from('exams')
           .select('name')
           .eq('id', examId)
           .single();
+
+        if (examError) {
+          console.error('Error fetching exam:', examError);
+        }
 
         if (exam) {
           setExamTitle(exam.name);
@@ -91,6 +96,8 @@ export default function ExamResultsPage() {
             focus_score: result.focus_score,
             percentage: result.percentage,
             grade: result.grade,
+            correct_answers: result.correct_answers,
+            total_questions: result.total_questions
           });
           setExamResult(result);
           setFocusScore(result.focus_score || 0);
@@ -126,7 +133,7 @@ export default function ExamResultsPage() {
     return 'text-red-400';
   };
 
-  const fetchAIReview = async () => {
+  const handleGetAiReview = async () => {
     // Try multiple sources for sessionId
     let finalSessionId = sessionId;
     
@@ -140,7 +147,7 @@ export default function ExamResultsPage() {
       }
     }
     
-    console.log('fetchAIReview - Final sessionId:', {
+    console.log('handleGetAiReview - Final sessionId:', {
       stateSessionId: sessionId,
       finalSessionId: finalSessionId,
       isValid: finalSessionId && finalSessionId !== 'undefined' && finalSessionId.trim() !== ''
@@ -165,13 +172,14 @@ export default function ExamResultsPage() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        console.error('AI Review Error:', error);
-        alert(`Error: ${error.error || 'Failed to generate AI review'}`);
+        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+        console.error('AI Review Error:', errorData);
+        alert(`Error: ${errorData.error || 'Failed to generate AI review'}`);
         return;
       }
 
       const data = await response.json();
+      console.log('AI Review received successfully');
       setAiReview(data.review);
       setShowReview(true);
     } catch (error) {
@@ -394,7 +402,7 @@ export default function ExamResultsPage() {
               Get comprehensive AI-powered feedback with strengths, areas for improvement, and study recommendations.
             </p>
             <button
-              onClick={fetchAIReview}
+              onClick={handleGetAiReview}
               disabled={reviewLoading}
               className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg hover:shadow-purple-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
             >

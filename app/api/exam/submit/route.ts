@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
+// Force dynamic rendering for this route
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/exam/submit
  * Submits the exam and calculates final cheat score and exam results
@@ -82,12 +85,16 @@ export async function POST(request: NextRequest) {
           if (question.options && answer.selected_options && answer.selected_options.length > 0) {
             const correctOptions = question.options
               .filter((opt: any) => opt && opt.isCorrect === true)
-              .map((opt: any) => opt.text);
+              .map((opt: any) => opt.text?.trim());
             
             // Check if student selected exactly the correct option(s)
-            const selectedOptions = answer.selected_options.filter((opt: any) => opt);
+            const selectedOptions = answer.selected_options
+              .filter((opt: any) => opt)
+              .map((opt: string) => opt?.trim());
             
-            if (selectedOptions.length === correctOptions.length) {
+            console.log(`Question ${questionId} - Correct: [${correctOptions}], Selected: [${selectedOptions}]`);
+            
+            if (selectedOptions.length === correctOptions.length && correctOptions.length > 0) {
               isCorrect = selectedOptions.every((selected: string) => 
                 correctOptions.includes(selected)
               );
@@ -97,7 +104,7 @@ export async function POST(request: NextRequest) {
           // True/False: Compare exact match
           if (question.options && answer.selected_options && answer.selected_options.length === 1) {
             const correctOption = question.options.find((opt: any) => opt && opt.isCorrect === true);
-            isCorrect = correctOption && answer.selected_options[0] === correctOption.text;
+            isCorrect = correctOption && answer.selected_options[0]?.trim() === correctOption.text?.trim();
           }
         } else if (question.type === 'text') {
           // Text questions: Mark as answered (not auto-graded)
@@ -105,6 +112,8 @@ export async function POST(request: NextRequest) {
             isCorrect = true; // Assume correct since text needs manual review
           }
         }
+        
+        console.log(`Question ${questionId} evaluated as: ${isCorrect ? 'CORRECT' : 'INCORRECT'}`);
         
         // Update answer record with correct status
         const updateData = {
@@ -130,7 +139,7 @@ export async function POST(request: NextRequest) {
         }
       } else {
         // Question not answered: mark as incorrect with 0 marks
-        // This is handled by not incrementing correctAnswers
+        console.log(`Question ${questionId} - NOT ANSWERED`);
       }
     });
 
