@@ -10,12 +10,16 @@ export const dynamic = 'force-dynamic'
 export default function DashboardPage() {
   const [isDark, setIsDark] = useState(true)
   useEffect(() => {
-    const theme = localStorage.getItem('theme')
-    setIsDark(theme !== 'light')
+    if (typeof window !== 'undefined') {
+      const theme = localStorage.getItem('theme')
+      setIsDark(theme !== 'light')
+    }
   }, [])
   const toggleTheme = () => {
     setIsDark((prev) => {
-      localStorage.setItem('theme', prev ? 'light' : 'dark')
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('theme', prev ? 'light' : 'dark')
+      }
       return !prev
     })
   }

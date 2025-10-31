@@ -19,16 +19,20 @@ export default function SignupPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'light') {
-      setIsDark(false)
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme')
+      if (savedTheme === 'light') {
+        setIsDark(false)
+      }
     }
   }, [])
 
   const toggleTheme = () => {
     const newTheme = !isDark
     setIsDark(newTheme)
-    localStorage.setItem('theme', newTheme ? 'dark' : 'light')
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', newTheme ? 'dark' : 'light')
+    }
   }
 
   const handleEmailSignup = async (e: React.FormEvent) => {

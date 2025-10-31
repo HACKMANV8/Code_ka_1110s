@@ -17,9 +17,11 @@ export default function LoginPage() {
   const supabase = createClient()
 
   useEffect(() => {
-    const savedTheme = localStorage.getItem('theme')
-    if (savedTheme === 'dark') {
-      setIsDark(true)
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme')
+      if (savedTheme === 'dark') {
+        setIsDark(true)
+      }
     }
   }, [])
 
