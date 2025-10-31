@@ -32,10 +32,10 @@ export async function GET(request: Request) {
       
       const role = profile?.role || 'student'
       const redirectPath = role === 'admin' ? '/admin' : '/dashboard'
-      return NextResponse.redirect(${origin}${redirectPath})
+      return NextResponse.redirect(`${origin}${redirectPath}`)
     }
   }
 
   // Return the user to an error page with instructions
-  return NextResponse.redirect(${origin}/login?error=authentication_failed)
+  return NextResponse.redirect(`${origin}/login?error=authentication_failed`)
 }

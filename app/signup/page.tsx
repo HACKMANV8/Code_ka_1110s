@@ -66,7 +66,7 @@ export default function SignupPage() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: ${window.location.origin}/auth/callback,
+        redirectTo: `${window.location.origin}/auth/callback`,
       },
     })
 
@@ -148,10 +148,10 @@ export default function SignupPage() {
   }
 
   return (
-    <div className={min-h-screen flex items-center justify-center transition-colors duration-300 bg-[#19191C] p-4}>
+    <div className="min-h-screen flex items-center justify-center transition-colors duration-300 bg-[#19191C] p-4">
       <button
         onClick={toggleTheme}
-        className={absolute top-6 right-6 p-2 rounded-lg transition-colors bg-white/10 hover:bg-white/20}
+        className="absolute top-6 right-6 p-2 rounded-lg transition-colors bg-white/10 hover:bg-white/20"
         aria-label="Toggle theme"
       >
         {isDark ? (
@@ -164,18 +164,18 @@ export default function SignupPage() {
           </svg>
         )}
       </button>
-      <div className={max-w-md w-full space-y-6 bg-white/5 border-white/10 border p-8 rounded-2xl backdrop-blur-sm}>
+      <div className="max-w-md w-full space-y-6 bg-white/5 border-white/10 border p-8 rounded-2xl backdrop-blur-sm">
         <div className="text-center">
           <div className="flex items-center justify-center space-x-2 mb-4">
             <div className="w-10 h-10 bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] rounded-lg flex items-center justify-center shadow-lg shadow-pink-500/20">
               <span className="text-white font-bold text-lg">E</span>
             </div>
-            <span className={font-bold text-xl text-white}>ExamProctor</span>
+            <span className="font-bold text-xl text-white">ExamProctor</span>
           </div>
-          <h2 className={text-2xl font-bold text-white mb-2}>
+          <h2 className="text-2xl font-bold text-white mb-2">
             Create your account
           </h2>
-          <p className={text-sm text-white/60}>
+          <p className="text-sm text-white/60">
             Or{' '}
             <Link
               href="/login"
@@ -188,14 +188,14 @@ export default function SignupPage() {
 
         <form className="space-y-5" onSubmit={handleEmailSignup}>
           {error && (
-            <div className={rounded-lg bg-red-500/10 border-red-500/30 border p-3}>
-              <p className={text-sm text-red-400}>{error}</p>
+            <div className="rounded-lg bg-red-500/10 border-red-500/30 border p-3">
+              <p className="text-sm text-red-400">{error}</p>
             </div>
           )}
 
           <div className="space-y-4">
             <div>
-              <label htmlFor="fullName" className={block text-sm font-medium text-white/80 mb-1.5}>
+              <label htmlFor="fullName" className="block text-sm font-medium text-white/80 mb-1.5">
                 Full Name
               </label>
               <input
@@ -205,13 +205,13 @@ export default function SignupPage() {
                 required
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className={block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all}
+                className="block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all"
                 placeholder="Enter your full name"
               />
             </div>
 
             <div>
-              <label htmlFor="email" className={block text-sm font-medium text-white/80 mb-1.5}>
+              <label htmlFor="email" className="block text-sm font-medium text-white/80 mb-1.5">
                 Email address
               </label>
               <input
@@ -222,7 +222,7 @@ export default function SignupPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className={block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all}
+                className="block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all"
                 placeholder="Enter your email"
               />
             </div>
@@ -239,7 +239,7 @@ export default function SignupPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className={block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all}
+                className="block w-full px-4 py-2.5 bg-white/5 border-white/10 text-white placeholder-white/40 border rounded-lg focus:outline-none focus:ring-2 focus:ring-[#FD366E] focus:border-transparent transition-all"
                 placeholder="Create a password (min. 6 characters)"
                 minLength={6}
               />
@@ -250,7 +250,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className={w-full flex justify-center py-3 px-4 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] hover:shadow-lg hover:shadow-pink-500/30 focus:outline-none focus:ring-2 focus:ring-[#FD366E] disabled:opacity-50 disabled:cursor-not-allowed transition-all ${loading ? 'opacity-60 cursor-not-allowed' : ''}}
+              className="w-full flex justify-center py-3 px-4 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] hover:shadow-lg hover:shadow-pink-500/30 focus:outline-none focus:ring-2 focus:ring-[#FD366E] disabled:opacity-50 disabled:cursor-not-allowed transition-all ${loading ? 'opacity-60 cursor-not-allowed' : ''"}
             >
               {loading ? 'Creating account...' : 'Sign up'}
             </button>
@@ -258,10 +258,10 @@ export default function SignupPage() {
 
           <div className="relative">
             <div className="absolute inset-0 flex items-center">
-              <div className={w-full border-t border-white/10}></div>
+              <div className="w-full border-t border-white/10"></div>
             </div>
             <div className="relative flex justify-center text-sm">
-              <span className={px-2 bg-[#19191C] text-white/60}>Or continue with</span>
+              <span className="px-2 bg-[#19191C] text-white/60">Or continue with</span>
             </div>
           </div>
 
@@ -270,7 +270,7 @@ export default function SignupPage() {
               type="button"
               onClick={handleGoogleSignup}
               disabled={loading}
-              className={w-full flex items-center justify-center gap-3 py-3 px-4 border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#FD366E] disabled:opacity-50 disabled:cursor-not-allowed border-white/10 bg-white/5 text-white hover:bg-white/10}
+              className="w-full flex items-center justify-center gap-3 py-3 px-4 border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-[#FD366E] disabled:opacity-50 disabled:cursor-not-allowed border-white/10 bg-white/5 text-white hover:bg-white/10"
             >
               <svg className="w-5 h-5" viewBox="0 0 24 24">
                 <path
@@ -296,7 +296,7 @@ export default function SignupPage() {
         </form>
 
         <p className="text-xs text-center text-white/50">
-          <span className={isDark ? 'text-white/50' : 'text-gray-500'}>All new users are registered as students by default</span>
+          <span className="isDark ? 'text-white/50' : 'text-gray-500'">All new users are registered as students by default</span>
         </p>
       </div>
     </div>
