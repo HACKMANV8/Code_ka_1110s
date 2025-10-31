@@ -244,14 +244,22 @@ export default function ExamPage() {
         setUserId(user.id);
 
         // Fetch exam details
-        const { data: exam } = await supabase
+        const { data: exam, error: examError } = await supabase
           .from('exams')
         .select('name, questions')
           .eq('id', examId)
           .single();
 
+        if (examError) {
+          console.error('Failed to load exam details', examError);
+        }
+
         if (!exam) {
-          setStatus('Exam not found');
+          setStatus(
+            examError?.message
+              ? `Error: ${examError.message}`
+              : 'Exam not found',
+          );
           setTimeout(() => router.push('/dashboard'), 2000);
           return;
         }

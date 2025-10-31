@@ -43,6 +43,17 @@ This table is essential for storing a student's response to each question, enabl
 
 ---
 
+### Existing Table: `exams`
+
+- Renamed `title` → `name` (TEXT, required).
+- `questions` is now `jsonb` with default `[]::jsonb`; each record follows the schema documented in the admin builder.
+- Row Level Security:
+  - `SELECT` is allowed for any non-admin profile (missing profiles fall back to `'student'`).
+  - Admins can read exams only when `created_by = auth.uid()`.
+  - Existing insert/update policies continue to restrict writes to admins.
+
+---
+
 ## 2. New Admin Functionality: Exam Creation
 
 This feature will enable users with the `admin` role to create new exams and populate them with questions.
