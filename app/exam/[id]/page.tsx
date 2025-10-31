@@ -1123,6 +1123,15 @@ export default function ExamPage() {
                                   className={`mt-4 w-full rounded-lg px-4 py-3 outline-none resize-none transition-all focus:ring-2 focus:border-blue-500 focus:ring-blue-500/40 ${inputBaseClass}`}
                                   rows={3}
                                   placeholder="Type your answer here..."
+                                  onPaste={(event) => {
+                                    event.preventDefault();
+                                  }}
+                                  onCopy={(event) => {
+                                    event.preventDefault();
+                                  }}
+                                  onCut={(event) => {
+                                    event.preventDefault();
+                                  }}
                                 />
                               )}
                             </div>
