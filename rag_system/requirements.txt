@@ -1,0 +1,23 @@
+# Core Web Framework
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Azure OpenAI
+openai==1.12.0
+
+# Vector Database & Scientific
+numpy==1.26.4
+faiss-cpu==1.8.0
+packaging==23.2
+
+# Document Processing
+PyPDF2==3.0.1
+python-docx==0.8.11
+
+# Configuration & Utilities
+pydantic==2.5.0
+pydantic-settings==2.1.0
+python-dotenv==1.0.0
+requests==2.31.0
+aiofiles==23.2.1

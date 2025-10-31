@@ -1,0 +1,168 @@
+# Sample Exam Study Material
+
+## Introduction to Computer Science
+
+This document contains study materials for the Computer Science fundamentals exam.
+
+### Chapter 1: Data Structures
+
+**Arrays**
+- Arrays are contiguous memory locations that store elements of the same data type
+- Access time: O(1) for index-based access
+- Insertion/Deletion: O(n) in worst case
+- Best used when: Size is known and frequent access by index is needed
+
+**Linked Lists**
+- Dynamic data structure with nodes containing data and pointer to next node
+- Types: Singly linked, Doubly linked, Circular linked
+- Access time: O(n) 
+- Insertion/Deletion: O(1) if position is known
+- Best used when: Frequent insertions/deletions needed
+
+**Stacks**
+- LIFO (Last In First Out) data structure
+- Operations: Push, Pop, Peek
+- Time complexity: O(1) for all operations
+- Applications: Expression evaluation, backtracking, undo mechanisms
+
+**Queues**
+- FIFO (First In First Out) data structure
+- Operations: Enqueue, Dequeue, Front, Rear
+- Time complexity: O(1) for all operations
+- Applications: Task scheduling, BFS traversal
+
+### Chapter 2: Algorithms
+
+**Sorting Algorithms**
+
+1. Bubble Sort
+   - Comparison-based algorithm
+   - Time: O(n²) average and worst case
+   - Space: O(1)
+   - Stable: Yes
+
+2. Quick Sort
+   - Divide and conquer algorithm
+   - Time: O(n log n) average, O(n²) worst
+   - Space: O(log n)
+   - Stable: No
+   - Preferred for large datasets
+
+3. Merge Sort
+   - Divide and conquer algorithm
+   - Time: O(n log n) all cases
+   - Space: O(n)
+   - Stable: Yes
+
+**Searching Algorithms**
+
+1. Linear Search
+   - Sequential search through elements
+   - Time: O(n)
+   - Works on unsorted arrays
+
+2. Binary Search
+   - Requires sorted array
+   - Time: O(log n)
+   - Divides search space in half each iteration
+
+### Chapter 3: Object-Oriented Programming
+
+**Four Pillars of OOP**
+
+1. **Encapsulation**
+   - Bundling data and methods that operate on that data
+   - Data hiding using access modifiers (private, public, protected)
+   - Provides security and modularity
+
+2. **Inheritance**
+   - Mechanism where child class inherits properties from parent
+   - Promotes code reusability
+   - Types: Single, Multiple, Multilevel, Hierarchical
+
+3. **Polymorphism**
+   - Ability to take multiple forms
+   - Method overloading (compile-time)
+   - Method overriding (runtime)
+
+4. **Abstraction**
+   - Hiding complex implementation details
+   - Showing only essential features
+   - Achieved through abstract classes and interfaces
+
+### Chapter 4: Database Fundamentals
+
+**Relational Databases**
+- Data organized in tables (relations)
+- Each table has rows (tuples) and columns (attributes)
+- Primary Key: Uniquely identifies each record
+- Foreign Key: Links tables together
+
+**SQL Basics**
+- DDL (Data Definition Language): CREATE, ALTER, DROP
+- DML (Data Manipulation Language): SELECT, INSERT, UPDATE, DELETE
+- Joins: INNER, LEFT, RIGHT, FULL OUTER
+
+**Normalization**
+- 1NF: Atomic values, no repeating groups
+- 2NF: 1NF + No partial dependencies
+- 3NF: 2NF + No transitive dependencies
+- Purpose: Reduce redundancy, improve data integrity
+
+### Chapter 5: Time Complexity Analysis
+
+**Big O Notation**
+- Describes upper bound of algorithm performance
+- Common complexities (best to worst):
+  - O(1) - Constant
+  - O(log n) - Logarithmic
+  - O(n) - Linear
+  - O(n log n) - Linearithmic
+  - O(n²) - Quadratic
+  - O(2ⁿ) - Exponential
+
+**Space Complexity**
+- Memory used by algorithm
+- Includes: Input space + Auxiliary space
+- Trade-off between time and space complexity
+
+## Practice Questions
+
+1. What is the time complexity of inserting an element at the beginning of a linked list?
+   Answer: O(1) because we only need to update the head pointer
+
+2. Explain the difference between stack and queue.
+   Answer: Stack follows LIFO principle while Queue follows FIFO principle
+
+3. Why is binary search faster than linear search?
+   Answer: Binary search eliminates half the search space in each iteration, giving O(log n) vs O(n)
+
+4. What is the main advantage of inheritance?
+   Answer: Code reusability and establishing a hierarchical relationship between classes
+
+5. What is a primary key in databases?
+   Answer: A column or set of columns that uniquely identifies each row in a table
+
+## Important Formulas
+
+- Array index calculation: address = base_address + (index × element_size)
+- Binary search: middle = (low + high) / 2
+- Time complexity recurrence: T(n) = T(n/2) + O(1) → O(log n)
+
+## Tips for Exam Success
+
+1. Understand concepts deeply, don't just memorize
+2. Practice implementing data structures from scratch
+3. Analyze time and space complexity of your solutions
+4. Draw diagrams to visualize data structures
+5. Test your code with edge cases
+
+## Common Mistakes to Avoid
+
+- Off-by-one errors in loops
+- Not handling null/empty cases
+- Forgetting to update pointers in linked lists
+- Incorrect base cases in recursion
+- Not considering edge cases in algorithms
+
+Good luck with your exam!
