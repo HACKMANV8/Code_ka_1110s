@@ -172,45 +172,6 @@ export default function Home() {
       <section className="relative pt-20 pb-28 px-6 lg:px-8">
         <div className="max-w-7xl mx-auto">
           <div className="grid items-center gap-12 md:grid-cols-2">
-<<<<<<< HEAD
-            {/* Left: copy */}
-            <div className="text-center md:text-left max-w-2xl mx-auto md:mx-0">
-              <div className={`inline-flex items-center px-4 py-1.5 rounded-full border ${isDark ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'} mb-8 backdrop-blur-sm`}>
-                <div className="w-1.5 h-1.5 bg-[#60A5FA] rounded-full mr-2 animate-pulse"></div>
-                <span className={`text-sm font-medium ${isDark ? 'text-white/90' : 'text-gray-700'}`}>AI-assisted exam creation & monitoring</span>
-              </div>
-              <h1 className={`text-5xl sm:text-6xl lg:text-7xl font-bold ${isDark ? 'text-white' : 'text-gray-900'} mb-6 leading-tight tracking-tight`}>
-                All-in-one exam{' '}
-                <span className="text-transparent bg-clip-text bg-gradient-to-r from-[#60A5FA] to-[#2563EB]">proctoring & review</span>
-              </h1>
-              <p className={`text-xl ${isDark ? 'text-white/60' : 'text-gray-600'} mb-10 leading-relaxed max-w-2xl mx-auto md:mx-0`}>
-                Drishti is an AI-assisted exam platform — create exams, monitor securely, and help students review with AI-driven insights.
-              </p>
-              <div className="flex flex-col sm:flex-row gap-4 justify-center md:justify-start mb-12">
-                <Link href="/signup" className="px-8 py-3.5 bg-gradient-to-r from-[#60A5FA] to-[#2563EB] text-white rounded-lg hover:shadow-xl hover:shadow-blue-400/30 transition-all font-semibold text-base">Start monitoring for free</Link>
-                <Link href="/login" className={`px-8 py-3.5 ${isDark ? 'bg-white/5 text-white border-white/10 hover:bg-white/10' : 'bg-gray-50 text-gray-900 border-gray-200 hover:bg-gray-100'} rounded-lg border transition-all font-semibold text-base backdrop-blur-sm`}>Sign in</Link>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-6 md:max-w-none max-w-4xl mx-auto md:mx-0">
-                {stats.map((stat, index) => (
-                  <div key={index} className={`text-center p-6 rounded-xl ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'} border backdrop-blur-sm`}>
-                    <div className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-[#60A5FA] to-[#2563EB] mb-1">{stat.value}</div>
-                    <div className={`text-sm ${isDark ? 'text-white/60' : 'text-gray-600'}`}>{stat.label}</div>
-                  </div>
-                ))}
-              </div>
-            </div>
-            {/* Right: provided illustration */}
-            <div className="relative mx-auto w-full max-w-[680px]">
-              <div className={`relative rounded-3xl overflow-hidden border ${isDark ? 'border-white/10' : 'border-gray-200'} shadow-2xl`}>
-                <Image
-                  src="/landing-image.jpg"
-                  alt="Illustrative exam session graphic"
-                  width={1360}
-                  height={1020}
-                  priority
-                  className="w-full h-auto object-cover"
-                />
-=======
             {/* Left: Hero copy */}
             <div className="text-center md:text-left max-w-2xl mx-auto md:mx-0">
             <div className={`inline-flex items-center px-4 py-1.5 rounded-full border ${isDark ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'} mb-8 backdrop-blur-sm gap-2`}
@@ -300,7 +261,6 @@ export default function Home() {
                     {stat.subtext && <div className={`text-xs ${isDark ? 'text-white/40' : 'text-gray-500'}`}>{stat.subtext}</div>}
                   </div>
                 ))}
->>>>>>> 1cfe33b2be434768a7d3eb4b52582df9b7624a08
               </div>
             </div>
           </div>
