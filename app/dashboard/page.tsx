@@ -347,7 +347,13 @@ export default function DashboardPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="ml-6">
+                    <div className="ml-6 flex gap-3">
+                      <button 
+                        onClick={() => router.push(`/exam/review/${session.id}`)}
+                        className={`px-6 py-3 rounded-lg transition-all font-medium border ${isDark ? 'bg-gradient-to-r from-pink-500/20 to-purple-500/20 text-pink-300 border-pink-500/30 hover:from-pink-500/30 hover:to-purple-500/30' : 'bg-pink-100 text-pink-700 border-pink-300 hover:bg-pink-200'}`}
+                      >
+                        ✨ Review Exam
+                      </button>
                       <button 
                         onClick={() => router.push(`/exam/${session.exams?.id}/results?score=${session.final_cheat_score}&status=${session.status}&sessionId=${session.session_id}`)}
                         className={`px-6 py-3 rounded-lg transition-all font-medium border ${isDark ? 'bg-slate-700/50 text-white border-slate-600 hover:bg-slate-700' : 'bg-gray-100 text-gray-900 border-gray-300 hover:bg-gray-200'}`}

@@ -231,15 +231,25 @@ export default function QuestionReviewCard({
         )}
 
         {showExplanation && aiExplanation && (
-          <div className="mt-4 p-4 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg">
-            <div className="flex items-center gap-2 mb-3">
-              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] flex items-center justify-center">
+          <div className="mt-4 p-5 bg-gradient-to-br from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-lg">
+            <div className="flex items-center gap-3 mb-4 pb-3 border-b border-purple-500/20">
+              <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] flex items-center justify-center flex-shrink-0">
                 <span className="text-white text-lg">🤖</span>
               </div>
-              <p className="text-white font-semibold">AI Explanation</p>
+              <div>
+                <p className="text-white font-bold">AI-Powered Explanation</p>
+                <p className="text-white/50 text-xs">Powered by Azure OpenAI</p>
+              </div>
             </div>
-            <div className="prose prose-invert prose-sm max-w-none">
-              <p className="text-white/90 leading-relaxed whitespace-pre-wrap">{aiExplanation}</p>
+            <div className="space-y-3">
+              {aiExplanation.split('\n\n').map((paragraph, idx) => (
+                <p key={idx} className="text-white/90 leading-relaxed text-sm">
+                  {paragraph}
+                </p>
+              ))}
+            </div>
+            <div className="mt-4 pt-3 border-t border-purple-500/20">
+              <p className="text-white/50 text-xs">✨ This explanation was generated using advanced AI to help you understand the concept better.</p>
             </div>
           </div>
         )}
