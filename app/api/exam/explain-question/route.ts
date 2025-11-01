@@ -92,8 +92,8 @@ export async function POST(request: NextRequest) {
     // Prepare prompt for AI
     const prompt = buildExplanationPrompt(question, studentAnswer);
 
-    // Call Gemini AI for explanation
-    const explanation = await getGeminiExplanation(prompt);
+    // Call Azure OpenAI for explanation
+    const explanation = await getAzureExplanation(prompt);
 
     // Save to review history
     await supabase
@@ -179,76 +179,87 @@ Keep the explanation concise but thorough (200-300 words).`;
   return prompt;
 }
 
-async function getGeminiExplanation(prompt: string): Promise<{ text: string; tokens: number }> {
-  const apiKey = process.env.GEMINI_API_KEY;
-
-  if (!apiKey) {
-    throw new Error('Gemini API key not configured. Please set GEMINI_API_KEY environment variable.');
+async function getAzureExplanation(prompt: string): Promise<{ text: string; tokens: number }> {
+  const apiKey =
+    process.env.AZURE_OPENAI_CHAT_API_KEY ??
+    process.env.AZURE_OPENAI_API_KEY;
+  const endpoint =
+    process.env.AZURE_OPENAI_CHAT_ENDPOINT ??
+    process.env.AZURE_OPENAI_ENDPOINT;
+  const deployment =
+    process.env.AZURE_OPENAI_CHAT_DEPLOYMENT ??
+    process.env.AZURE_OPENAI_DEPLOYMENT ??
+    process.env.AZURE_OPENAI_DEPLOYMENT_NAME ??
+    process.env.AZURE_LLM_DEPLOYMENT;
+  const apiVersion =
+    process.env.AZURE_OPENAI_CHAT_API_VERSION ??
+    process.env.AZURE_OPENAI_API_VERSION ??
+    '2024-02-15-preview';
+  
+  if (!apiKey || !endpoint || !deployment) {
+    throw new Error(
+      'Azure OpenAI chat configuration is missing. Please set AZURE_OPENAI_CHAT_API_KEY, AZURE_OPENAI_CHAT_ENDPOINT, and AZURE_OPENAI_CHAT_DEPLOYMENT (or the legacy AZURE_OPENAI_* equivalents).'
+    );
   }
-
-  // Use v1 endpoint with latest model
-  const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash-latest:generateContent?key=${apiKey}`;
+  
+  const normalizedEndpoint = endpoint.replace(/\/$/, '');
+  const url = `${normalizedEndpoint}/openai/deployments/${deployment}/chat/completions?api-version=${apiVersion}`;
 
   try {
     const response = await fetch(url, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'api-key': apiKey,
       },
       body: JSON.stringify({
-        contents: [
+        messages: [
           {
-            parts: [
-              {
-                text: prompt
-              }
-            ]
-          }
+            role: 'system',
+            content: 'You are an expert educator providing detailed explanations for exam questions.',
+          },
+          {
+            role: 'user',
+            content: prompt,
+          },
         ],
-        generationConfig: {
-          maxOutputTokens: 800,
-          temperature: 0.7,
-        }
+        temperature: 0.7,
+        max_tokens: 800,
       }),
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Gemini API error:', {
+      console.error('Azure OpenAI API error:', {
         status: response.status,
         statusText: response.statusText,
         error: errorText,
       });
-      
+
       if (response.status === 401) {
-        throw new Error('Gemini API authentication failed. Check your API key.');
+        throw new Error('Azure OpenAI authentication failed. Check your API key.');
       } else if (response.status === 404) {
-        throw new Error('Gemini API endpoint not found. The model or endpoint may have changed.');
+        throw new Error('Azure OpenAI deployment not found. Verify your deployment name.');
       } else if (response.status === 429) {
-        throw new Error('Gemini API rate limit exceeded. Please try again later.');
+        throw new Error('Azure OpenAI rate limit exceeded. Please try again later.');
       } else {
-        throw new Error(`Gemini API failed: ${response.status} ${response.statusText}`);
+        throw new Error(`Azure OpenAI API failed: ${response.status} ${response.statusText}`);
       }
     }
 
     const data = await response.json();
-    
-    if (!data.candidates || !data.candidates[0] || !data.candidates[0].content) {
-      console.error('Unexpected Gemini API response format:', data);
-      throw new Error('Invalid response from Gemini API');
-    }
-    
-    const textContent = data.candidates[0].content.parts[0]?.text || 'No explanation generated';
-    const tokens = data.usageMetadata?.totalTokenCount || 0;
-    
+
+    const textContent = data.choices?.[0]?.message?.content?.trim() || 'No explanation generated';
+    const tokens = data.usage?.total_tokens || 0;
+
     return {
       text: textContent,
-      tokens: tokens,
+      tokens,
     };
   } catch (error) {
     if (error instanceof Error) {
       throw error;
     }
-    throw new Error(`Gemini API request failed: ${String(error)}`);
+    throw new Error(`Azure OpenAI request failed: ${String(error)}`);
   }
 }

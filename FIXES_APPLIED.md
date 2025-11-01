@@ -146,7 +146,7 @@
    → Backend validates session and authorization
    → Fetches exam questions, student answers, and results
    → Builds comprehensive prompt with Q&A analysis
-   → Calls Gemini AI API
+   → Calls Azure OpenAI API
    → Returns formatted review text
    → Displays in modal
    ```
@@ -209,7 +209,7 @@
 2. Clear `.next` cache: `rm -rf .next` (or `rmdir /s .next` on Windows)
 3. Restart dev server: `npm run dev`
 4. Check browser network tab for exact request URL
-5. Verify `GEMINI_API_KEY` is set in `.env.local`
+5. Verify Azure chat credentials (`AZURE_OPENAI_CHAT_API_KEY`, `AZURE_OPENAI_CHAT_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT`) and embedding credentials (`AZURE_OPENAI_EMBEDDING_API_KEY`, `AZURE_OPENAI_EMBEDDING_ENDPOINT`, `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`) are set in `.env.local`
 
 ### Option Selection Issues:
 1. Open browser DevTools → Console

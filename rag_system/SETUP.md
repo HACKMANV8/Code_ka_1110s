@@ -52,22 +52,31 @@ pip install -r requirements.txt
 Edit the `.env` file in the `rag_system` folder:
 
 ```env
-# Get these from Azure Portal > Azure OpenAI > Keys and Endpoint
-AZURE_OPENAI_API_KEY=your_key_here
-AZURE_OPENAI_ENDPOINT=https://your-resource.openai.azure.com/
-AZURE_OPENAI_API_VERSION=2024-02-15-preview
+# Chat completions (gpt-4 / gpt-35-turbo etc.)
+AZURE_OPENAI_CHAT_API_KEY=your_chat_key
+AZURE_OPENAI_CHAT_ENDPOINT=https://your-chat-resource.openai.azure.com/
+AZURE_OPENAI_CHAT_API_VERSION=2024-02-15-preview
+AZURE_OPENAI_CHAT_DEPLOYMENT=gpt-4
 
-# Your deployment names (from Azure Portal > Azure OpenAI > Deployments)
-AZURE_EMBEDDING_DEPLOYMENT=text-embedding-ada-002
-AZURE_LLM_DEPLOYMENT=gpt-35-turbo
+# Embeddings (text-embedding-ada-002-4 etc.)
+AZURE_OPENAI_EMBEDDING_API_KEY=your_embedding_key
+AZURE_OPENAI_EMBEDDING_ENDPOINT=https://your-embedding-resource.openai.azure.com/
+AZURE_OPENAI_EMBEDDING_API_VERSION=2023-05-15
+AZURE_OPENAI_EMBEDDING_DEPLOYMENT=text-embedding-ada-002-4
+
+# Legacy single-endpoint fallbacks (optional)
+# AZURE_OPENAI_API_KEY=
+# AZURE_OPENAI_ENDPOINT=
+# AZURE_OPENAI_API_VERSION=
+# AZURE_OPENAI_DEPLOYMENT=
 ```
 
 **How to get Azure credentials:**
 1. Go to Azure Portal (portal.azure.com)
-2. Navigate to your Azure OpenAI resource
-3. Go to "Keys and Endpoint" section
-4. Copy KEY 1 and Endpoint
-5. Go to "Model deployments" to see your deployment names
+2. Navigate to the Azure OpenAI resource that hosts your chat deployment
+3. Open **Keys and Endpoint** to copy the key and endpoint
+4. Go to **Model deployments** to copy the chat deployment name
+5. Repeat the same steps for the resource that hosts your embedding deployment (if different)
 
 ### 6. Start the RAG System
 ```powershell

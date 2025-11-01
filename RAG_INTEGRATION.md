@@ -85,7 +85,7 @@ python test_api.py
 Modify `app/api/exam/ai-review/route.ts` to call RAG system:
 
 ```typescript
-// Instead of direct Gemini API call
+// Instead of direct Azure OpenAI call
 const response = await fetch(`${process.env.RAG_API_URL}/query`, {
   method: 'POST',
   headers: { 'Content-Type': 'application/json' },

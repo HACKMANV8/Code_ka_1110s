@@ -37,22 +37,79 @@ const describeFinding = (finding) => {
 
 const describeNetworkBlock = (block) => {
   if (!block) return '';
-  if (block.error) {
-    return `Network block error: ${block.error}.`;
-  }
+
+  const domains = Array.isArray(block.domains) ? block.domains : [];
+  const domainSummary = (() => {
+    if (domains.length === 0) {
+      return 'configured domains';
+    }
+    if (domains.length <= 3) {
+      return domains.join(', ');
+    }
+    const preview = domains.slice(0, 3).join(', ');
+    return `${preview} +${domains.length - 3} more`;
+  })();
+
   if (block.applied) {
-    const location = block.path ? ` (${block.path})` : '';
-    const flushInfo = block.flush?.success
-      ? ` DNS flushed via ${block.flush.command}.`
-      : block.flush?.command === null
-      ? ' DNS flush command unavailable.'
-      : '';
-    return `Network block active for reddit.com${location}.${flushInfo}`;
+    const segments = [`Network block active for ${domainSummary}`];
+
+    if (block.hosts?.applied) {
+      const hostParts = ['hosts file'];
+      if (block.hosts.path) {
+        hostParts[0] += ` (${block.hosts.path})`;
+      }
+      const flush = block.hosts.flush;
+      if (flush?.success) {
+        hostParts.push(`DNS flushed via ${flush.command}`);
+      } else if (flush && flush.command === null) {
+        hostParts.push('DNS flush command unavailable');
+      }
+      segments.push(hostParts.join(' - '));
+    } else if (block.hosts?.reason === 'hosts_disabled') {
+      segments.push('Hosts file edits disabled');
+    } else if (block.hosts?.error) {
+      segments.push(`hosts file unavailable (${block.hosts.error})`);
+    }
+
+    if (block.interceptor?.enabled) {
+      segments.push('Electron interceptor active');
+    } else if (block.interceptor?.reason && block.interceptor.reason !== 'not_enabled') {
+      const readableReason = block.interceptor.reason.replace(/_/g, ' ');
+      const detail = block.interceptor.error ? `: ${block.interceptor.error}` : '';
+      segments.push(`interceptor ${readableReason}${detail}`);
+    }
+
+    return `${segments.join('. ')}.`;
   }
+
   if (block.reason === 'removed' || block.reason === 'not_blocked') {
     return 'Network block disabled.';
   }
-  return '';
+
+  if (block.error) {
+    return `Network block error: ${block.error}.`;
+  }
+
+  const issues = [];
+  if (block.hosts?.error) {
+    issues.push(`hosts: ${block.hosts.error}`);
+  }
+  if (block.hosts?.reason === 'hosts_disabled') {
+    issues.push('hosts: edits disabled');
+  }
+  if (block.interceptor?.error) {
+    issues.push(`interceptor: ${block.interceptor.error}`);
+  }
+
+  if (issues.length > 0) {
+    return `Network block inactive. Issues: ${issues.join('; ')}.`;
+  }
+
+  if (block.reason) {
+    return `Network block inactive (${block.reason}).`;
+  }
+
+  return 'Network block inactive.';
 };
 
 const updateDetails = (baseText) => {

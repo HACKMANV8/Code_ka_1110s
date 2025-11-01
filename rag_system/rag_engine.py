@@ -15,11 +15,11 @@ class RAGEngine:
     def __init__(self, vector_store: VectorStore):
         self.vector_store = vector_store
         self.client = AzureOpenAI(
-            api_key=settings.AZURE_OPENAI_API_KEY,
-            api_version=settings.AZURE_OPENAI_API_VERSION,
-            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT
+            api_key=settings.chat_api_key,
+            api_version=settings.chat_api_version,
+            azure_endpoint=settings.chat_endpoint
         )
-        self.llm_model = settings.AZURE_LLM_DEPLOYMENT
+        self.llm_model = settings.chat_deployment
     
     def query(self, question: str, session_id: str = None) -> Dict[str, Any]:
         """

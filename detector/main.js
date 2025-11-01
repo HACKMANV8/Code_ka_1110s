@@ -2,6 +2,11 @@ import { app, BrowserWindow, ipcMain } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { startApiServer } from './src/apiServer.js';
+import {
+  enableNetworkInterceptor,
+  disableNetworkInterceptor,
+  getInterceptorState,
+} from './src/networkInterceptor.js';
 import { blockDomains, unblockDomains } from './src/networkBlocker.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -40,49 +45,125 @@ const BLOCKED_DOMAINS = [
   'stackblitz.com',
   'jsfiddle.net',
   'codepen.io',
-  'glitch.com'
+  'glitch.com',
 ];
-let networkBlockState = { applied: false };
 
-const updateNetworkBlockState = (data = {}) => {
-  networkBlockState = {
-    applied: Boolean(data.applied),
-    path: data.path || networkBlockState.path,
-    reason: data.reason,
-    error: data.error,
-    flush: data.flush || networkBlockState.flush,
+const combineNetworkState = ({ hosts, interceptor }) => {
+  const hostState = hosts ?? { applied: false };
+  const interceptorState = interceptor ?? { enabled: false };
+
+  const applied = Boolean(hostState.applied) || Boolean(interceptorState.enabled);
+  const reason = hostState.applied
+    ? hostState.reason ?? 'hosts_applied'
+    : interceptorState.enabled
+    ? interceptorState.reason ?? 'interceptor_enabled'
+    : hostState.reason ?? interceptorState.reason;
+  const error = applied ? undefined : hostState.error ?? interceptorState.error;
+
+  return {
+    applied,
+    reason,
+    error,
+    path: hostState.path,
+    flush: hostState.flush,
+    hosts: hostState,
+    interceptor: interceptorState,
+    domains: [...BLOCKED_DOMAINS],
   };
+};
+
+let networkBlockState = combineNetworkState({
+  hosts: { applied: false },
+  interceptor: getInterceptorState(),
+});
+
+const applyNetworkBlock = async () => {
+  let hostsResult;
+  let hostsError;
+
+  try {
+    hostsResult = await blockDomains(BLOCKED_DOMAINS);
+  } catch (error) {
+    hostsError = error;
+  }
+
+  const hostState = (() => {
+    if (hostsError) {
+      return { applied: false, error: hostsError.message, reason: 'error' };
+    }
+    if (!hostsResult) {
+      return { applied: false, reason: 'no_result' };
+    }
+    const applied = Boolean(hostsResult.applied || hostsResult.reason === 'already_blocked');
+    return {
+      applied,
+      path: hostsResult.path,
+      flush: hostsResult.flush,
+      reason: hostsResult.reason || (applied ? 'hosts_applied' : undefined),
+      error: hostsResult.error,
+    };
+  })();
+
+  const interceptorState = enableNetworkInterceptor(BLOCKED_DOMAINS);
+  if (!interceptorState.enabled && interceptorState.reason && interceptorState.reason !== 'no_domains') {
+    console.warn('Network interceptor inactive:', interceptorState.reason, interceptorState.error || '');
+  }
+
+  networkBlockState = combineNetworkState({
+    hosts: hostState,
+    interceptor: interceptorState,
+  });
+
+  if (!networkBlockState.applied) {
+    console.error('Failed to apply network block:', networkBlockState.error ?? 'unknown reason');
+  }
+
   return networkBlockState;
 };
 
-const applyNetworkBlock = async () => {
-  try {
-    const result = await blockDomains(BLOCKED_DOMAINS);
-    const applied = result.applied || result.reason === 'already_blocked';
-    return updateNetworkBlockState({
-      applied,
-      path: result.path,
-      reason: result.reason || (applied ? 'applied' : undefined),
-    });
-  } catch (error) {
-    console.error('Failed to apply network block:', error);
-    return updateNetworkBlockState({ applied: false, error: error.message });
-  }
-};
-
 const removeNetworkBlock = async () => {
+  let hostsResult;
+  let hostsError;
+
   try {
-    const result = await unblockDomains(BLOCKED_DOMAINS);
-    const removed = result.removed || result.reason === 'not_blocked';
-    return updateNetworkBlockState({
-      applied: removed ? false : networkBlockState.applied,
-      path: result.path,
-      reason: result.reason || (removed ? 'removed' : undefined),
-    });
+    hostsResult = await unblockDomains(BLOCKED_DOMAINS);
   } catch (error) {
-    console.error('Failed to remove network block:', error);
-    return updateNetworkBlockState({ applied: false, error: error.message });
+    hostsError = error;
   }
+
+  const hostState = (() => {
+    if (hostsError) {
+      return { applied: false, error: hostsError.message, reason: 'error' };
+    }
+    if (!hostsResult) {
+      return { applied: false, reason: 'no_result' };
+    }
+    const removed = Boolean(hostsResult.removed || hostsResult.reason === 'not_blocked');
+    return {
+      applied: false,
+      removed,
+      path: hostsResult.path,
+      flush: hostsResult.flush,
+      reason: hostsResult.reason || (removed ? 'removed' : undefined),
+      error: hostsResult.error,
+    };
+  })();
+
+  const interceptorDisable = disableNetworkInterceptor();
+  const interceptorState = {
+    ...interceptorDisable,
+    enabled: false,
+  };
+  if (!interceptorDisable.disabled && interceptorDisable.reason !== 'not_enabled') {
+    console.warn('Network interceptor removal issue:', interceptorDisable.reason, interceptorDisable.error || '');
+  }
+
+  networkBlockState = combineNetworkState({
+    hosts: hostState,
+    interceptor: interceptorState,
+  });
+
+  return networkBlockState;
 };
 
 const createWindow = () => {

@@ -47,7 +47,7 @@ npm run dev
 4. Click "AI Review"
 5. The system will now:
    - First try RAG system (context-aware using your PDF)
-   - If RAG fails, fall back to Gemini API
+   - If RAG fails, fall back to Azure OpenAI
 
 ## How It Works
 
@@ -94,8 +94,9 @@ python main.py
 - Check the file path in `upload_pdf.py` is correct
 - Verify you have the PDF at the specified location
 
-### AI Review still uses Gemini
+### AI Review still uses Azure OpenAI directly
 - Check `.env.local` has `RAG_API_URL=http://localhost:8001`
+- Ensure Azure OpenAI chat credentials (`AZURE_OPENAI_CHAT_API_KEY`, `AZURE_OPENAI_CHAT_ENDPOINT`, `AZURE_OPENAI_CHAT_DEPLOYMENT`) and embedding credentials (`AZURE_OPENAI_EMBEDDING_API_KEY`, `AZURE_OPENAI_EMBEDDING_ENDPOINT`, `AZURE_OPENAI_EMBEDDING_DEPLOYMENT`) are configured in `.env.local`
 - Restart Next.js dev server after changing .env
 - Check RAG server logs for errors
 

@@ -17,12 +17,12 @@ class VectorStore:
     
     def __init__(self):
         self.client = AzureOpenAI(
-            api_key=settings.AZURE_OPENAI_API_KEY,
-            api_version=settings.AZURE_OPENAI_API_VERSION,
-            azure_endpoint=settings.AZURE_OPENAI_ENDPOINT
+            api_key=settings.embedding_api_key,
+            api_version=settings.embedding_api_version,
+            azure_endpoint=settings.embedding_endpoint
         )
         
-        self.embedding_model = settings.AZURE_EMBEDDING_DEPLOYMENT
+        self.embedding_model = settings.embedding_deployment
         self.index_path = os.path.join(settings.VECTOR_DB_DIR, "faiss_index.bin")
         self.metadata_path = os.path.join(settings.VECTOR_DB_DIR, "metadata.json")
         
