@@ -44,9 +44,6 @@ export default function ExamReviewPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Map<string | number, StudentAnswer>>(new Map());
   const [error, setError] = useState<string | null>(null);
-  const [aiReview, setAiReview] = useState<string | null>(null);
-  const [showAiReview, setShowAiReview] = useState(false);
-  const [loadingAiReview, setLoadingAiReview] = useState(false);
 
   const supabase = createClient();
 
@@ -128,35 +125,6 @@ export default function ExamReviewPage() {
       setError(err.message || 'Failed to load exam review');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGetAiReview = async () => {
-    if (aiReview) {
-      setShowAiReview(!showAiReview);
-      return;
-    }
-
-    setLoadingAiReview(true);
-    try {
-      const response = await fetch('/api/exam/ai-review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: sessionId }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to get AI review');
-      }
-
-      const data = await response.json();
-      setAiReview(data.review);
-      setShowAiReview(true);
-    } catch (err) {
-      console.error('Error getting AI review:', err);
-      setError('Failed to load AI review. Please try again.');
-    } finally {
-      setLoadingAiReview(false);
     }
   };
 
@@ -261,88 +229,20 @@ export default function ExamReviewPage() {
           </div>
         </div>
 
-        {/* AI Info Banner */}
+        {/* Info Banner */}
         <div className="bg-gradient-to-r from-purple-500/10 to-pink-500/10 border border-purple-500/30 rounded-xl p-4 mb-6">
           <div className="flex items-center gap-3">
             <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] flex items-center justify-center">
               <span className="text-xl">✨</span>
             </div>
             <div className="flex-1">
-              <p className="text-white font-semibold mb-1">AI-Powered Review</p>
+              <p className="text-white font-semibold mb-1">AI-Powered Question Reviews</p>
               <p className="text-white/70 text-sm">
-                Get a comprehensive AI analysis of your entire exam performance with personalized study recommendations
+                Click "Get AI Explanation" on any question below to receive personalized feedback based on uploaded study materials
               </p>
             </div>
-            <button
-              onClick={handleGetAiReview}
-              disabled={loadingAiReview}
-              className="flex-shrink-0 px-6 py-3 bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] text-white rounded-lg font-medium hover:shadow-lg hover:shadow-pink-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {loadingAiReview ? (
-                <>
-                  <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  Generating...
-                </>
-              ) : (
-                <>
-                  <span>🤖</span>
-                  {aiReview ? (showAiReview ? 'Hide' : 'Show') + ' AI Review' : 'Get AI Review'}
-                </>
-              )}
-            </button>
           </div>
         </div>
-
-        {/* AI Review Loading State */}
-        {loadingAiReview && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 border-4 border-[#FD366E]/30 border-t-[#FD366E] rounded-full animate-spin" />
-              <div>
-                <p className="text-white font-semibold mb-1">Analyzing Exam Materials...</p>
-                <p className="text-white/60 text-sm">
-                  Retrieving the most relevant chunks from the knowledge base and generating your personalized AI review.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* AI Review Section */}
-        {showAiReview && aiReview && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6 mb-6">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-[#FD366E] to-[#FF6B9D] flex items-center justify-center">
-                <span className="text-2xl">🤖</span>
-              </div>
-              <div>
-                <h2 className="text-xl font-bold text-white">Comprehensive AI Review</h2>
-                <p className="text-white/60 text-sm">Powered by Azure OpenAI</p>
-              </div>
-            </div>
-            <div className="prose prose-invert max-w-none">
-              <div className="text-white/90 whitespace-pre-wrap leading-relaxed">
-                {aiReview.split('\n').map((line, idx) => {
-                  // Handle markdown-style headers
-                  if (line.startsWith('###')) {
-                    return <h3 key={idx} className="text-lg font-bold text-white mt-4 mb-2">{line.replace(/^###\s*/, '')}</h3>;
-                  } else if (line.startsWith('##')) {
-                    return <h2 key={idx} className="text-xl font-bold text-white mt-6 mb-3">{line.replace(/^##\s*/, '')}</h2>;
-                  } else if (line.startsWith('#')) {
-                    return <h1 key={idx} className="text-2xl font-bold text-white mt-6 mb-4">{line.replace(/^#\s*/, '')}</h1>;
-                  } else if (line.startsWith('**') && line.endsWith('**')) {
-                    return <p key={idx} className="font-bold text-white mt-3">{line.replace(/\*\*/g, '')}</p>;
-                  } else if (line.trim().startsWith('-') || line.trim().startsWith('•')) {
-                    return <li key={idx} className="ml-4 text-white/80">{line.replace(/^[\s\-•]+/, '')}</li>;
-                  } else if (line.trim()) {
-                    return <p key={idx} className="text-white/80 mb-2">{line}</p>;
-                  }
-                  return <br key={idx} />;
-                })}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* Questions Review */}
         <div className="space-y-4">

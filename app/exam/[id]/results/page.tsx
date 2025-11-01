@@ -33,9 +33,6 @@ export default function ExamResultsPage() {
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState('');
-  const [aiReview, setAiReview] = useState<string | null>(null);
-  const [reviewLoading, setReviewLoading] = useState(false);
-  const [showReview, setShowReview] = useState(false);
 
   const supabase = createClient();
 
@@ -133,63 +130,6 @@ export default function ExamResultsPage() {
     return 'text-red-400';
   };
 
-  const handleGetAiReview = async () => {
-    // Try multiple sources for sessionId
-    let finalSessionId = sessionId;
-    
-    // If sessionId not in state, try sessionStorage or URL
-    if (!finalSessionId || finalSessionId === 'undefined' || finalSessionId.trim() === '') {
-      if (typeof window !== 'undefined') {
-        finalSessionId = sessionStorage.getItem('examSessionId') || '';
-      }
-      if (!finalSessionId) {
-        finalSessionId = searchParams.get('sessionId') || '';
-      }
-    }
-    
-    console.log('handleGetAiReview - Final sessionId:', {
-      stateSessionId: sessionId,
-      finalSessionId: finalSessionId,
-      isValid: finalSessionId && finalSessionId !== 'undefined' && finalSessionId.trim() !== ''
-    });
-    
-    if (!finalSessionId || finalSessionId === 'undefined' || finalSessionId.trim() === '') {
-      console.error('Invalid session ID - cannot fetch AI review:', {
-        sessionId,
-        storageValue: typeof window !== 'undefined' ? sessionStorage.getItem('examSessionId') : 'N/A',
-        urlValue: searchParams.get('sessionId'),
-      });
-      alert('Session ID not available. Please try again.');
-      return;
-    }
-
-    try {
-      setReviewLoading(true);
-      const response = await fetch('/api/exam/ai-review', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ session_id: finalSessionId }),
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-        console.error('AI Review Error:', errorData);
-        alert(`Error: ${errorData.error || 'Failed to generate AI review'}`);
-        return;
-      }
-
-      const data = await response.json();
-      console.log('AI Review received successfully');
-      setAiReview(data.review);
-      setShowReview(true);
-    } catch (error) {
-      console.error('Error fetching AI review:', error);
-      alert('Failed to generate AI review. Please try again.');
-    } finally {
-      setReviewLoading(false);
-    }
-  };
-
   const getStatusBadge = () => {
     if (status === 'flagged') {
       return (
@@ -249,51 +189,6 @@ export default function ExamResultsPage() {
 
   return (
     <div className="min-h-screen bg-[#19191C] py-12 px-4">
-      {reviewLoading && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40 flex items-center justify-center p-4">
-          <div className="bg-[#19191C] border border-white/10 rounded-2xl p-6 max-w-sm w-full text-center">
-            <div className="w-12 h-12 border-4 border-[#FD366E]/30 border-t-[#FD366E] rounded-full animate-spin mx-auto mb-4" />
-            <h3 className="text-white font-semibold mb-2">Generating AI Review</h3>
-            <p className="text-white/60 text-sm">
-              We&#39;re fetching supporting context from the vector database and asking the AI tutor to craft feedback.
-            </p>
-          </div>
-        </div>
-      )}
-      {/* AI Review Modal */}
-      {showReview && aiReview && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-[#19191C] border border-white/10 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-[#19191C] border-b border-white/10 p-6 flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white flex items-center gap-3">
-                <span>🤖</span> AI Exam Review
-              </h2>
-              <button
-                onClick={() => setShowReview(false)}
-                className="text-white/60 hover:text-white transition-colors text-2xl"
-              >
-                ✕
-              </button>
-            </div>
-            <div className="p-6">
-              <div className="prose prose-invert max-w-none">
-                <div className="text-white/90 leading-relaxed whitespace-pre-wrap">
-                  {aiReview}
-                </div>
-              </div>
-            </div>
-            <div className="border-t border-white/10 p-6 bg-white/5">
-              <button
-                onClick={() => setShowReview(false)}
-                className="w-full bg-gradient-to-r from-[#FD366E] to-[#FF6B9D] text-white font-semibold py-3 px-6 rounded-xl hover:shadow-lg hover:shadow-pink-500/30 transition-all"
-              >
-                Close Review
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="text-center mb-8">
@@ -381,7 +276,7 @@ export default function ExamResultsPage() {
         </div>
 
         {/* Information Cards */}
-        <div className="grid md:grid-cols-2 gap-4 mb-8">
+        <div className="grid md:grid-cols-1 gap-4 mb-8">
           <div className="bg-white/5 border border-white/10 rounded-xl p-6">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
@@ -400,26 +295,6 @@ export default function ExamResultsPage() {
                 <span>📝</span> Review Answers
               </Link>
             )}
-          </div>
-
-          <div className="bg-white/5 border border-white/10 rounded-xl p-6">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                <span className="text-xl">🤖</span>
-              </div>
-              <h3 className="text-white font-semibold">Get AI Review</h3>
-            </div>
-            <p className="text-white/70 text-sm leading-relaxed mb-4">
-              Get comprehensive AI-powered feedback with strengths, areas for improvement, and study recommendations.
-            </p>
-            <button
-              onClick={handleGetAiReview}
-              disabled={reviewLoading}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 text-white rounded-lg font-medium hover:shadow-lg hover:shadow-purple-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span>{reviewLoading ? '⏳' : '✨'}</span> 
-              {reviewLoading ? 'Generating...' : 'Get Review'}
-            </button>
           </div>
         </div>
 

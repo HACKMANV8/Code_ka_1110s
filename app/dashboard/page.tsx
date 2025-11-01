@@ -476,12 +476,6 @@ export default function DashboardPage() {
                             {100 - session.final_cheat_score}%
                           </p>
                         </div>
-                        <button 
-                          onClick={() => router.push(`/exam/${session.exams?.id}/results?score=${session.final_cheat_score}&status=${session.status}&sessionId=${session.session_id}`)}
-                          className={`px-3 py-1 text-sm rounded-md transition-colors ${isDark ? 'bg-blue-600 text-white hover:bg-blue-700' : 'bg-blue-600 text-white hover:bg-blue-700'}`}
-                        >
-                          View Details
-                        </button>
                       </div>
                     </div>
                   ))}

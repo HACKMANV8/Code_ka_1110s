@@ -42,14 +42,44 @@ class DocumentProcessor:
             raise Exception(f"Error loading document: {str(e)}")
     
     def _load_pdf(self, file_path: str) -> List[str]:
-        """Load PDF file"""
+        """Load PDF file - tries text extraction first, then OCR if needed"""
         text_content = []
         try:
             pdf_reader = PdfReader(file_path)
-            for page in pdf_reader.pages:
+            
+            # Try extracting text first
+            for page_num, page in enumerate(pdf_reader.pages):
                 text = page.extract_text()
-                if text:
+                if text and text.strip():
                     text_content.append(text)
+            
+            # If no text was extracted, try OCR
+            if not text_content:
+                print("  No text extracted directly, attempting OCR...")
+                try:
+                    from pdf2image import convert_from_path  # type: ignore
+                    import pytesseract  # type: ignore
+                    
+                    # Convert PDF to images
+                    images = convert_from_path(file_path)
+                    
+                    for i, image in enumerate(images):
+                        print(f"  OCR processing page {i+1}/{len(images)}...")
+                        text = pytesseract.image_to_string(image)
+                        if text and text.strip():
+                            text_content.append(text)
+                    
+                    if text_content:
+                        print(f"  ✓ OCR extracted text from {len(text_content)} pages")
+                except ImportError:
+                    raise Exception(
+                        "This appears to be a scanned PDF without text. "
+                        "To process scanned PDFs, install: pip install pytesseract pdf2image "
+                        "and install Tesseract OCR on your system."
+                    )
+                except Exception as ocr_error:
+                    raise Exception(f"OCR failed: {str(ocr_error)}")
+            
             return text_content
         except Exception as e:
             raise Exception(f"Error reading PDF: {str(e)}")
@@ -130,6 +160,21 @@ class DocumentProcessor:
         Returns:
             List of chunk dictionaries
         """
+        print(f"Processing file: {file_path}")
         texts = self.load_document(file_path)
+        print(f"Extracted {len(texts)} text sections from document")
+        
+        if not texts:
+            raise ValueError(f"No text could be extracted from {file_path}. The file may be empty or unreadable.")
+        
+        # Debug: print first few characters of extracted text
+        for i, text in enumerate(texts[:3]):
+            print(f"  Section {i+1} preview: {text[:100]}...")
+        
         chunks = self.chunk_text(texts)
+        print(f"Created {len(chunks)} chunks")
+        
+        if not chunks:
+            raise ValueError(f"No chunks were created from the extracted text. Text may be too short or improperly formatted.")
+        
         return chunks

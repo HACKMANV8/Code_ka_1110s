@@ -93,7 +93,7 @@ export async function POST(request: NextRequest) {
       .eq('session_id', session_id);
 
     const questions = exam.questions as Question[];
-    const ragApiUrl = process.env.RAG_API_URL || 'http://localhost:8002';
+    const ragApiUrl = process.env.RAG_API_URL || 'http://localhost:8001';
 
     console.log('Generating AI review via Azure RAG service...');
     const ragReview = await getRAGReview(

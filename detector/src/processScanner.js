@@ -2,7 +2,19 @@ import psList from 'ps-list';
 import os from 'os';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
-import { SUSPICIOUS_PROCESS_SIGNATURES, DEFAULT_SCAN_CONFIG } from './suspiciousApps.js';
+import { SUSPICIOUS_PROCESS_SIGNATURES, DEFAULT_SCAN_CONFIG, SIGNATURE_HASH } from './suspiciousApps.js';
+import { validateOrThrow } from './signatureValidator.js';
+
+// 🔐 Validate signature integrity on module load - prevents student tampering
+try {
+  validateOrThrow(SUSPICIOUS_PROCESS_SIGNATURES, SIGNATURE_HASH);
+  console.log('✓ Signature validation passed - integrity confirmed');
+} catch (error) {
+  console.error('✗ CRITICAL: Signature validation failed!');
+  console.error(error.message);
+  // Exit the app if signatures are tampered - security critical
+  process.exit(1);
+}
 
 const dedupe = (array) => Array.from(new Set(array.filter(Boolean)));
 const sanitize = (value) => (value ?? '').toString().trim();

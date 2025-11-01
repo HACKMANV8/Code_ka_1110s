@@ -1,3 +1,7 @@
+// 🔐 Cryptographic hash to prevent tampering with signature list
+// DO NOT MODIFY - This hash validates the integrity of the signatures below
+export const SIGNATURE_HASH = "ed544ac99e71b63db4c47559c317fa8111054cc7328cda8ded64cf62d44f2be3";
+
 export const SUSPICIOUS_PROCESS_SIGNATURES = [
   // AI/LLM Tools - HIGH PRIORITY
   {

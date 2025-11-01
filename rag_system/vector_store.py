@@ -61,8 +61,10 @@ class VectorStore:
         Args:
             chunks: List of chunk dictionaries with 'content' field
         """
-        if not chunks:
-            raise ValueError("No chunks to add")
+        if not chunks or len(chunks) == 0:
+            raise ValueError("No chunks to add. Document may be empty or failed to process.")
+        
+        print(f"Adding {len(chunks)} chunks to vector store...")
         
         embeddings = []
         for chunk in chunks:
