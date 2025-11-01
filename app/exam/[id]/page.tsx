@@ -53,6 +53,10 @@ export default function ExamPage() {
   const [detectorStatus, setDetectorStatus] = useState<'checking' | 'running' | 'missing' | 'error'>('checking');
   const [detectorCheckAttempts, setDetectorCheckAttempts] = useState(0);
   const [canStartExam, setCanStartExam] = useState(false);
+  
+  // Submission UX state
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submissionProgress, setSubmissionProgress] = useState(0);
 
   type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
 
@@ -1143,6 +1147,26 @@ export default function ExamPage() {
   const submitExam = useCallback(async (options?: { forceCheatScore?: number; forceStatus?: 'submitted' | 'flagged'; reason?: string }) => {
     if (!sessionId) return;
 
+    // Show submission UI
+    setIsSubmitting(true);
+    setSubmissionProgress(0);
+
+    // Simulate progress steps for better UX
+    const progressSteps = [
+      { delay: 100, progress: 20, message: 'Stopping monitoring...' },
+      { delay: 300, progress: 40, message: 'Saving your answers...' },
+      { delay: 500, progress: 60, message: 'Calculating results...' },
+      { delay: 700, progress: 80, message: 'Finalizing submission...' },
+    ];
+
+    // Animate progress
+    progressSteps.forEach(({ delay, progress, message }) => {
+      setTimeout(() => {
+        setSubmissionProgress(progress);
+        setStatus(message);
+      }, delay);
+    });
+
     // Stop everything
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop());
@@ -1189,6 +1213,14 @@ export default function ExamPage() {
     });
 
     const result = await response.json();
+    
+    // Complete progress
+    setSubmissionProgress(100);
+    setStatus('✅ Submission complete! Redirecting to results...');
+    
+    // Small delay before redirect for better UX
+    await new Promise(resolve => setTimeout(resolve, 800));
+    
     if (result.success) {
       router.push(`/exam/${examId}/results?score=${result.final_cheat_score}&status=${result.status}&sessionId=${sessionId}`);
     }
@@ -1494,6 +1526,90 @@ export default function ExamPage() {
 
   return (
     <div className={`min-h-screen py-8 transition-colors duration-300 ${pageBackgroundClass}`}>
+      {/* Submission Overlay */}
+      {isSubmitting && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center">
+          <div className={`${isDark ? 'bg-slate-800 border-slate-700' : 'bg-white border-gray-200'} border rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4`}>
+            <div className="text-center space-y-6">
+              {/* Success Icon Animation */}
+              <div className="relative mx-auto w-20 h-20">
+                <div className="absolute inset-0 bg-gradient-to-br from-emerald-500 to-emerald-600 rounded-full flex items-center justify-center animate-pulse">
+                  {submissionProgress === 100 ? (
+                    <svg className="w-12 h-12 text-white animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                    </svg>
+                  ) : (
+                    <svg className="w-12 h-12 text-white animate-spin" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                  )}
+                </div>
+              </div>
+
+              {/* Heading */}
+              <div>
+                <h3 className={`text-2xl font-bold mb-2 ${headingTextClass}`}>
+                  {submissionProgress === 100 ? 'Exam Submitted Successfully!' : 'Submitting Your Exam'}
+                </h3>
+                <p className={`text-sm ${secondaryTextClass}`}>
+                  {submissionProgress === 100 
+                    ? 'Your responses have been recorded securely' 
+                    : 'Please wait while we process your submission'}
+                </p>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="space-y-2">
+                <div className={`h-2 rounded-full overflow-hidden ${isDark ? 'bg-slate-700' : 'bg-gray-200'}`}>
+                  <div 
+                    className="h-full bg-gradient-to-r from-emerald-500 to-emerald-600 transition-all duration-500 ease-out"
+                    style={{ width: `${submissionProgress}%` }}
+                  />
+                </div>
+                <p className={`text-xs font-medium ${subtleTextClass}`}>
+                  {status}
+                </p>
+              </div>
+
+              {/* Status Messages */}
+              <div className={`rounded-lg p-4 ${isDark ? 'bg-slate-700/50' : 'bg-gray-50'}`}>
+                <div className="flex items-start gap-3 text-left">
+                  <div className="flex-shrink-0 mt-0.5">
+                    {submissionProgress === 100 ? (
+                      <div className="w-5 h-5 rounded-full bg-emerald-500 flex items-center justify-center">
+                        <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    ) : (
+                      <div className="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <p className={`text-sm font-medium ${headingTextClass}`}>
+                      {submissionProgress === 100 ? 'Processing Complete' : 'Processing Your Submission'}
+                    </p>
+                    <p className={`text-xs mt-1 ${subtleTextClass}`}>
+                      {submissionProgress === 100 
+                        ? 'Redirecting you to your results page...' 
+                        : 'Your answers are being securely saved and your proctoring data is being analyzed'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Info Note */}
+              {submissionProgress < 100 && (
+                <p className={`text-xs ${subtleTextClass} italic`}>
+                  ⏳ This may take a few moments. Please do not close this window.
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+      
       {/* Fullscreen Re-enter Button */}
       {showFullscreenPrompt && isStarted && (
         <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50">
