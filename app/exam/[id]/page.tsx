@@ -48,6 +48,11 @@ export default function ExamPage() {
   const [detectorWarningCount, setDetectorWarningCount] = useState(0);
   const [detectorStatusDetails, setDetectorStatusDetails] = useState<string | null>(null);
   const [studentAnswers, setStudentAnswers] = useState<Map<number | string, any>>(new Map());
+  
+  // 🔒 MANDATORY DETECTOR REQUIREMENT
+  const [detectorStatus, setDetectorStatus] = useState<'checking' | 'running' | 'missing' | 'error'>('checking');
+  const [detectorCheckAttempts, setDetectorCheckAttempts] = useState(0);
+  const [canStartExam, setCanStartExam] = useState(false);
 
   type ParsedQuestion = Omit<ExamQuestion, 'id'> & { id?: number };
 
@@ -201,6 +206,113 @@ export default function ExamPage() {
     };
   }, []);
 
+  // 🔒 MANDATORY DETECTOR CHECK - Must be running before exam starts
+  useEffect(() => {
+    const checkDetector = async () => {
+      try {
+        const healthEndpoint = DETECTOR_ENDPOINT.replace('/scan', '/health');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+
+        const response = await fetch(healthEndpoint, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          const data = await response.json();
+          console.log('✅ Detector is running:', data);
+          setDetectorStatus('running');
+          setCanStartExam(true);
+          setDetectorStatusDetails(`Detector active (Port ${data.port || '4000'})`);
+        } else {
+          throw new Error('Detector returned non-OK status');
+        }
+      } catch (error: any) {
+        console.error('❌ Detector check failed:', error.message);
+        setDetectorStatus('missing');
+        setCanStartExam(false);
+        setDetectorCheckAttempts(prev => prev + 1);
+        
+        if (error.name === 'AbortError') {
+          setDetectorStatusDetails('Detector timeout - not responding');
+        } else {
+          setDetectorStatusDetails('Detector not running - please start the detector app');
+        }
+      }
+    };
+
+    // Initial check
+    checkDetector();
+
+    // Retry every 3 seconds if detector is missing
+    const interval = setInterval(() => {
+      if (detectorStatus !== 'running') {
+        checkDetector();
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [detectorStatus]);
+
+  // 🔒 CONTINUOUS DETECTOR MONITORING - During exam
+  useEffect(() => {
+    if (!isStarted) return;
+    if (detectorStatus !== 'running') return;
+
+    let missedChecks = 0;
+    const MAX_MISSED_CHECKS = 3; // Allow 3 failed checks before action
+
+    const monitorDetector = async () => {
+      try {
+        const healthEndpoint = DETECTOR_ENDPOINT.replace('/scan', '/health');
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3000);
+
+        const response = await fetch(healthEndpoint, {
+          method: 'GET',
+          signal: controller.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (response.ok) {
+          missedChecks = 0; // Reset counter on success
+          console.log('✅ Detector heartbeat OK');
+        } else {
+          missedChecks++;
+          console.warn(`⚠️ Detector returned error (missed: ${missedChecks}/${MAX_MISSED_CHECKS})`);
+        }
+      } catch (error) {
+        missedChecks++;
+        console.error(`❌ Detector unreachable (missed: ${missedChecks}/${MAX_MISSED_CHECKS})`);
+      }
+
+      // If detector goes offline during exam, force submit with penalty
+      if (missedChecks >= MAX_MISSED_CHECKS) {
+        console.error('🚨 DETECTOR OFFLINE - FORCING EXAM SUBMISSION');
+        addManualAlert('detector_stopped_during_exam');
+        
+        alert('⚠️ Security system offline detected!\n\nThe detector app has stopped running. Your exam will be submitted automatically with a security violation flag.');
+        
+        // Force submit the exam with penalty
+        await submitExam({ 
+          forceCheatScore: 0,  // Worst score
+          forceStatus: 'flagged',  // Flag the submission
+          reason: 'Detector stopped during exam'
+        });
+      }
+    };
+
+    // Check every 10 seconds during exam
+    const interval = setInterval(monitorDetector, 10000);
+    monitorDetector(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [isStarted, detectorStatus, addManualAlert]);
+
   const pageBackgroundClass = isDark ? 'bg-slate-900 text-white' : 'bg-gray-50 text-gray-900';
   const cardClass = isDark ? 'bg-slate-800/60 border border-slate-700' : 'bg-white border border-gray-200';
   const mutedPanelClass = isDark ? 'bg-slate-800/40 border border-slate-700/80' : 'bg-gray-50 border border-gray-200/80';
@@ -283,6 +395,152 @@ export default function ExamPage() {
       };
     }
   }, [isStarted]);
+
+  // 🔒 SECURITY ENHANCEMENT #1: Block DevTools Keyboard Shortcuts
+  useEffect(() => {
+    if (!isStarted) return;
+
+    const blockDevToolsKeys = (e: KeyboardEvent) => {
+      // F12 - Opens DevTools
+      // Ctrl+Shift+I - Opens DevTools (Inspect)
+      // Ctrl+Shift+C - Opens DevTools (Element Picker)
+      // Ctrl+Shift+J - Opens DevTools (Console)
+      // Ctrl+U - View Page Source
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && e.key === 'I') ||
+        (e.ctrlKey && e.shiftKey && e.key === 'C') ||
+        (e.ctrlKey && e.shiftKey && e.key === 'J') ||
+        (e.ctrlKey && e.key === 'U')
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        addManualAlert('devtools_hotkey_attempt');
+        console.log('[BLOCKED] DevTools keyboard shortcut attempt:', e.key);
+        return false;
+      }
+    };
+
+    document.addEventListener('keydown', blockDevToolsKeys, true);
+    return () => {
+      document.removeEventListener('keydown', blockDevToolsKeys, true);
+    };
+  }, [isStarted, addManualAlert]);
+
+  // 🔒 SECURITY ENHANCEMENT #2: Detect DevTools Opening (Window Size Method)
+  useEffect(() => {
+    if (!isStarted) return;
+
+    let devToolsOpen = false;
+    const threshold = 160; // DevTools typically adds >160px
+
+    const detectDevTools = () => {
+      const widthThreshold = window.outerWidth - window.innerWidth > threshold;
+      const heightThreshold = window.outerHeight - window.innerHeight > threshold;
+      const isOpen = widthThreshold || heightThreshold;
+
+      if (isOpen && !devToolsOpen) {
+        devToolsOpen = true;
+        addManualAlert('devtools_opened');
+        console.warn('[SECURITY] DevTools detected as OPEN');
+      } else if (!isOpen && devToolsOpen) {
+        devToolsOpen = false;
+        console.log('[SECURITY] DevTools closed');
+      }
+    };
+
+    // Check every second
+    const interval = setInterval(detectDevTools, 1000);
+    detectDevTools(); // Initial check
+
+    return () => clearInterval(interval);
+  }, [isStarted, addManualAlert]);
+
+  // 🔒 SECURITY ENHANCEMENT #3: Detect Virtual Desktops & Window Hiding
+  useEffect(() => {
+    if (!isStarted) return;
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        addManualAlert('window_hidden_or_virtual_desktop');
+        console.warn('[SECURITY] Window hidden - possible virtual desktop switch or window minimize');
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isStarted, addManualAlert]);
+
+  // 🔒 SECURITY ENHANCEMENT #4: Intercept Network Requests to LLM APIs
+  useEffect(() => {
+    if (!isStarted) return;
+
+    const originalFetch = window.fetch;
+    const originalXhrOpen = XMLHttpRequest.prototype.open;
+
+    // List of suspicious domains (LLM services)
+    const suspiciousUrls = [
+      'openai.com',
+      'api.openai.com',
+      'chat.openai.com',
+      'anthropic.com',
+      'api.anthropic.com',
+      'claude.ai',
+      'gemini.google.com',
+      'generativelanguage.googleapis.com',
+      'perplexity.ai',
+      'you.com',
+      'chatgpt.com',
+      'bard.google.com',
+      'huggingface.co',
+      'replicate.com',
+      'cohere.ai',
+      'ai21.com'
+    ];
+
+    // Intercept fetch API
+    window.fetch = function(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+      const url = input?.toString() || '';
+      
+      const isSuspicious = suspiciousUrls.some(domain => url.toLowerCase().includes(domain));
+      
+      if (isSuspicious) {
+        addManualAlert('llm_api_request_blocked');
+        console.error('[BLOCKED] Suspicious LLM API request:', url);
+        return Promise.reject(new Error('Network request blocked: Suspicious AI service detected'));
+      }
+      
+      return originalFetch.call(this, input, init as RequestInit);
+    };
+
+    // Intercept XMLHttpRequest
+    XMLHttpRequest.prototype.open = function(
+      method: string, 
+      url: string | URL, 
+      async: boolean = true,
+      username?: string | null,
+      password?: string | null
+    ): void {
+      const urlString = url.toString().toLowerCase();
+      const isSuspicious = suspiciousUrls.some(domain => urlString.includes(domain));
+      
+      if (isSuspicious) {
+        addManualAlert('llm_api_request_blocked');
+        console.error('[BLOCKED] Suspicious XHR request:', url);
+        throw new Error('Network request blocked: Suspicious AI service detected');
+      }
+      
+      return originalXhrOpen.call(this, method, url, async, username, password);
+    };
+
+    // Restore original functions on cleanup
+    return () => {
+      window.fetch = originalFetch;
+      XMLHttpRequest.prototype.open = originalXhrOpen;
+    };
+  }, [isStarted, addManualAlert]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -496,6 +754,17 @@ export default function ExamPage() {
   // Start exam
   const startExam = async () => {
     if (!sessionId || !userId) return;
+
+    // 🔒 MANDATORY: Check if detector is running before allowing exam start
+    if (detectorStatus !== 'running') {
+      alert('⚠️ Security System Required!\n\nThe Detector app must be running before you can start the exam.\n\nPlease start the detector application and wait for it to connect.');
+      return;
+    }
+
+    if (!canStartExam) {
+      alert('⚠️ Please wait for the detector to connect...');
+      return;
+    }
 
     try {
       setManualAlerts([]);
@@ -1625,14 +1894,84 @@ export default function ExamPage() {
                   </p>
                 </div>
               )}
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
+                {/* 🔒 DETECTOR STATUS INDICATOR */}
+                {!isStarted && (
+                  <div className={`rounded-lg border px-4 py-3 text-sm ${
+                    detectorStatus === 'running' 
+                      ? successPanelClass
+                      : detectorStatus === 'checking'
+                      ? highlightPanelClass
+                      : warningPanelClass
+                  }`}>
+                    <div className="flex items-center gap-2">
+                      {detectorStatus === 'running' && (
+                        <>
+                          <span className="relative flex h-2 w-2">
+                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-500 opacity-75"></span>
+                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                          </span>
+                          <span className="font-semibold text-emerald-600">Detector Running</span>
+                        </>
+                      )}
+                      {detectorStatus === 'checking' && (
+                        <>
+                          <svg className="animate-spin h-4 w-4 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                          </svg>
+                          <span className="font-semibold text-blue-600">Checking Detector...</span>
+                        </>
+                      )}
+                      {detectorStatus === 'missing' && (
+                        <>
+                          <svg className="w-4 h-4 text-red-500" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd"/>
+                          </svg>
+                          <span className="font-semibold text-red-600">Detector Not Running</span>
+                        </>
+                      )}
+                    </div>
+                    <p className={`text-xs mt-1 ${isDark ? 'text-white/70' : 'text-gray-600'}`}>
+                      {detectorStatusDetails || 'Verifying security system...'}
+                    </p>
+                    {detectorStatus === 'missing' && (
+                      <p className={`text-xs mt-2 font-medium ${isDark ? 'text-red-400' : 'text-red-600'}`}>
+                        ⚠️ Please start the Detector desktop app (Port 4000) before beginning the exam.
+                      </p>
+                    )}
+                  </div>
+                )}
+                
                 {!isStarted ? (
                   <button
                     onClick={startExam}
-                    disabled={!sessionId}
-                    className="flex-1 bg-gradient-to-r from-blue-600 to-blue-500 hover:shadow-lg text-white font-semibold py-3.5 px-6 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                    disabled={!sessionId || !canStartExam || detectorStatus !== 'running'}
+                    className={`flex-1 font-semibold py-3.5 px-6 rounded-lg transition-all flex items-center justify-center gap-2 ${
+                      !sessionId || !canStartExam || detectorStatus !== 'running'
+                        ? 'bg-gray-400 cursor-not-allowed opacity-60'
+                        : 'bg-gradient-to-r from-blue-600 to-blue-500 hover:shadow-lg text-white'
+                    }`}
                   >
-                    <span>▶️</span> Start Exam
+                    {detectorStatus === 'checking' ? (
+                      <>
+                        <svg className="animate-spin h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        <span>Waiting for Detector...</span>
+                      </>
+                    ) : detectorStatus === 'missing' ? (
+                      <>
+                        <span>🔒</span>
+                        <span>Detector Required</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>▶️</span>
+                        <span>Start Exam</span>
+                      </>
+                    )}
                   </button>
                 ) : (
                   <button

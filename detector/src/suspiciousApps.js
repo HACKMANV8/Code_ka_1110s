@@ -1,8 +1,45 @@
 export const SUSPICIOUS_PROCESS_SIGNATURES = [
+  // AI/LLM Tools - HIGH PRIORITY
+  {
+    label: "ChatGPT Desktop",
+    patterns: ["chatgpt", "openai", "gpt"],
+  },
+  {
+    label: "Claude Desktop",
+    patterns: ["claude", "anthropic"],
+  },
+  {
+    label: "Ollama (Local LLM)",
+    patterns: ["ollama", "llama"],
+  },
+  {
+    label: "LM Studio",
+    patterns: ["lmstudio", "lm-studio", "lmstudio.exe"],
+  },
+  {
+    label: "GPT4All",
+    patterns: ["gpt4all", "gpt-4-all"],
+  },
+  {
+    label: "Oobabooga Text Generation",
+    patterns: ["oobabooga", "text-generation-webui"],
+  },
+  {
+    label: "KoboldAI",
+    patterns: ["koboldai", "kobold"],
+  },
+  {
+    label: "AI Browser Extensions",
+    patterns: ["monica", "merlin", "chatgpt-writer", "textblaze", "compose.ai"],
+  },
+  
+  // Calculator Apps
   {
     label: "Calculator",
-    patterns: ["Calculator", "CalculatorApp", "CalculatorApp.exe"],
+    patterns: ["Calculator", "CalculatorApp", "CalculatorApp.exe", "calculator.exe", "calc"],
   },
+  
+  // Virtual Camera Software
   {
     label: "OBS Virtual Camera",
     patterns: ["obs64", "obs32", "obs", "obs-virtualcam"],
@@ -13,7 +50,7 @@ export const SUSPICIOUS_PROCESS_SIGNATURES = [
   },
   {
     label: "ManyCam",
-    patterns: ["manycam"],
+    patterns: ["manycam", "mcam"],
   },
   {
     label: "YouCam",
@@ -47,22 +84,6 @@ export const SUSPICIOUS_PROCESS_SIGNATURES = [
     label: "NDI Tools",
     patterns: ["ndi", "scanconverter"],
   },
-  {
-    label: "ManyCam Service",
-    patterns: ["mcam"],
-  },
-  {
-    label: "Calculator",
-    patterns: [
-      "calculator",
-      "calculatorapp",
-      "calculatorapp.exe",
-      "calculator.exe",
-      "calc",
-      "Calculator",
-      "CalculatorApp"
-    ],
-  }
 ];
 
 export const DEFAULT_SCAN_CONFIG = {
